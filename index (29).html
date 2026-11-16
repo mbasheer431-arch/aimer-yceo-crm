@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12355B">
+<title>Young CEO 2.0 · Outreach CRM · AIMER Business School</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* ====================================================================
+   1. YOUR SETTINGS — the only part you need to edit
+   Supabase → Project Settings → API Keys (and Data API for the URL)
+   ==================================================================== */
+window.CRM_CONFIG = {
+  SUPABASE_URL: 'https://fclldydvlmleubklifto.supabase.co/rest/v1/',
+  SUPABASE_KEY: 'sb_secret_aSp_mc2bd6nrwk6Vf695-w_b3az8W0q',      // public key, safe in the browser
+  CAMPUS_VENUE: 'AIMER Campus',
+  CAMPUS_ADDRESS: 'AIMER Business School, Markaz Knowledge City, Kozhikode, Kerala',
+  DISTRICTS: ['Thiruvananthapuram','Kollam','Pathanamthitta','Alappuzha','Kottayam','Idukki','Ernakulam','Thrissur','Palakkad','Malappuram','Kozhikode','Wayanad','Kannur','Kasaragod','Other – India','UAE','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain'],
+  CATEGORIES: ['Government','Aided','Unaided','International','Other'],
+  BOARDS: ['Kerala State','CBSE','ICSE','IB','IGCSE / Cambridge','Other'],
+  SOURCES: ['Cold call','Field visit','MediaOne network','Referral','Inbound enquiry','Event','Other'],
+};
+</script>
+<style>
+:root{
+  --brand:#12355B; --brand-deep:#0A203A; --brand-tint:#E6EEF7; --gold:#C8932E; --gold-tint:#FAF2E1;
+  --ink:#18222F; --soft:#475569; --muted:#788596; --paper:#F4F6F9; --card:#FFFFFF; --line:#DEE4EC;
+  --ok:#168054; --warn:#B86E0C; --bad:#C43030; --on-brand:#FFFFFF;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --brand:#7DAADE; --brand-deep:#C4D8F0; --brand-tint:#1A283C; --gold:#E2B152; --gold-tint:#322814;
+  --ink:#E6ECF4; --soft:#ACB8C8; --muted:#808EA0; --paper:#0E141E; --card:#161E2B; --line:#2C384A;
+  --ok:#4ABE8C; --warn:#E6AA46; --bad:#EC6868; --on-brand:#0E141E; color-scheme:dark;
+}}
+*{box-sizing:border-box} html,body{margin:0;background:var(--paper);color:var(--ink)}
+body{font:15px/1.5 'Hanken Grotesk',system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent}
+h1,h2,h3,.num{font-family:'Bricolage Grotesque','Hanken Grotesk',sans-serif;margin:0;letter-spacing:-.01em}
+h1{font-size:26px} h2{font-size:18px} h3{font-size:16px}
+a{color:var(--brand)} button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+.wrap{max-width:1200px;margin:0 auto;padding:20px 16px 110px}
+@media(min-width:900px){.wrap{padding:28px 28px 48px}}
+/* header + nav */
+.top{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top)}
+.top .in{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:20px;height:60px;padding:0 16px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700} .logo small{display:block;font-weight:500;font-size:11px;color:var(--muted)}
+.tabs{display:none;gap:4px;flex:1} @media(min-width:900px){.tabs{display:flex}}
+.tab{border:0;background:none;padding:8px 14px;border-radius:8px;font-weight:600;color:var(--soft);cursor:pointer}
+.tab.on{background:var(--brand-tint);color:var(--brand)}
+.who{margin-left:auto;text-align:right;font-size:13px;line-height:1.2} .who b{display:block}
+.bottom{position:fixed;inset:auto 0 0 0;z-index:20;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+@media(min-width:900px){.bottom{display:none}}
+.bottom button{border:0;background:none;padding:10px 0 9px;font-size:12px;font-weight:600;color:var(--muted)} .bottom button.on{color:var(--brand)}
+.bottom svg{display:block;margin:0 auto 2px}
+/* building blocks */
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+.head p{margin:4px 0 0;color:var(--soft);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+.pad{padding:18px} .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;gap:16px} @media(min-width:900px){.g2{grid-template-columns:1.3fr 1fr}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:10px;padding:10px 16px;font-weight:600;font-size:14px;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink);text-decoration:none;white-space:nowrap}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:#0A203A}
+.btn.danger{color:var(--bad)} .btn.sm{padding:6px 10px;font-size:13px}
+.input{width:100%;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 12px;font-size:15px}
+.input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 18%,transparent)}
+label.f{display:block} label.f>span{display:block;font-size:13px;font-weight:600;color:var(--soft);margin-bottom:5px}
+.form{display:grid;gap:14px} @media(min-width:640px){.form.two{grid-template-columns:1fr 1fr}.form .full{grid-column:1/-1}}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap;background:var(--paper);color:var(--soft)}
+.b-Contacted{background:#0EA5E91A;color:#0369A1} .b-Interested,.b-Tentative{background:var(--gold-tint);color:var(--warn)}
+.b-Confirmed{background:#1680541A;color:var(--ok)} .b-Programme-scheduled,.b-Rescheduled{background:#7C3AED1A;color:#7C3AED}
+.b-Programme-completed,.b-Completed{background:var(--brand-tint);color:var(--brand)} .b-Not-interested,.b-Cancelled{background:#C430301A;color:var(--bad)}
+@media(prefers-color-scheme:dark){.b-Contacted{color:#7DD3FC}.b-Programme-scheduled,.b-Rescheduled{color:#C4B5FD}}
+.msg{border-radius:10px;padding:10px 14px;font-size:14px;border:1px solid}
+.msg.bad{border-color:color-mix(in srgb,var(--bad) 30%,transparent);color:var(--bad);background:color-mix(in srgb,var(--bad) 6%,transparent)}
+.msg.warn{border-color:color-mix(in srgb,var(--warn) 35%,transparent);color:var(--warn);background:var(--gold-tint)}
+.msg.ok{border-color:color-mix(in srgb,var(--ok) 30%,transparent);color:var(--ok);background:color-mix(in srgb,var(--ok) 6%,transparent)}
+.muted{color:var(--muted)} .soft{color:var(--soft)} .small{font-size:13px} .bad{color:var(--bad)} .warn{color:var(--warn)} .ok{color:var(--ok)}
+.list>*+*{border-top:1px solid var(--line)} .item{display:flex;align-items:center;gap:10px;padding:12px 18px}
+.item .grow{flex:1;min-width:0} .trunc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.click{cursor:pointer} .click:hover{background:var(--paper)}
+.icon{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--card);flex:none}
+table{width:100%;border-collapse:collapse} th{font-size:12px;color:var(--muted);text-align:left;padding:10px 14px;background:var(--paper);white-space:nowrap}
+td{padding:11px 14px;border-top:1px solid var(--line);font-size:14px;vertical-align:top} .r{text-align:right}
+.scroll{overflow-x:auto}
+.hide-sm{display:none} @media(min-width:760px){.hide-sm{display:block}.hide-lg{display:none}} table.hide-sm{display:table}
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px} @media(min-width:760px){.stats{grid-template-columns:repeat(6,1fr)}}
+.stat{padding:16px;cursor:pointer;text-align:left;border:1px solid var(--line);background:var(--card);border-radius:14px}
+.stat .num{font-size:32px;font-weight:700;line-height:1;color:var(--brand)} .stat p{margin:8px 0 0;font-size:13px;color:var(--soft)}
+.stat .bar{height:5px;border-radius:9px;background:var(--brand-tint);margin-top:10px;overflow:hidden} .stat .bar i{display:block;height:100%;background:var(--gold)}
+.stat.alert .num{color:var(--bad)}
+/* modal */
+.veil{position:fixed;inset:0;z-index:50;background:rgba(10,20,35,.45);display:flex;align-items:flex-end;justify-content:center}
+@media(min-width:760px){.veil{align-items:center;padding:24px}}
+.sheet{background:var(--card);width:100%;max-width:760px;max-height:94vh;overflow:auto;border-radius:18px 18px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom))}
+@media(min-width:760px){.sheet{border-radius:18px;padding:24px}}
+.sheet-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}
+.x{border:0;background:var(--paper);border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:18px;flex:none}
+/* calendar */
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))} .cal .dow{font-size:12px;font-weight:600;color:var(--muted);padding:8px;background:var(--paper)}
+.cal .day{min-height:104px;border-top:1px solid var(--line);border-right:1px solid var(--line);padding:6px}
+.cal .day:nth-child(7n){border-right:0} .cal .off{background:color-mix(in srgb,var(--paper) 60%,transparent)}
+.dnum{display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;border-radius:99px;font-size:12px;font-weight:700}
+.dnum.today{background:var(--gold);color:#0A203A}
+.ev{display:block;width:100%;text-align:left;border:1px solid;border-radius:7px;padding:2px 6px;margin-top:4px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev.campus{background:var(--gold-tint);border-color:color-mix(in srgb,var(--gold) 50%,transparent);color:var(--ink)}
+.ev.school{background:var(--card);border-color:color-mix(in srgb,var(--brand) 40%,transparent);color:var(--ink)}
+.ev.done{background:var(--brand-tint);border-color:transparent;color:var(--brand)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;background:var(--card)}
+.seg button{border:0;background:none;padding:6px 12px;border-radius:7px;font-weight:600;font-size:13px;color:var(--soft);cursor:pointer}
+.seg button.on{background:var(--brand);color:var(--on-brand)}
+.chips{display:grid;grid-template-columns:repeat(2,1fr);gap:6px} @media(min-width:640px){.chips{grid-template-columns:repeat(4,1fr)}}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:9px 6px;font-size:13px;font-weight:600;cursor:pointer;text-align:center}
+.chip.on{border-color:var(--brand);background:var(--brand-tint);color:var(--brand)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:60;background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:10px;font-weight:600;font-size:14px}
+.timeline>div{position:relative;padding:0 0 16px 18px;border-left:1px solid var(--line);margin-left:6px}
+.timeline>div:before{content:'';position:absolute;left:-5px;top:6px;width:9px;height:9px;border-radius:9px;background:var(--gold)}
+.dist{display:grid;gap:12px} .dist .track i{display:block;height:100%} .dist .track{height:8px;border-radius:9px;background:var(--brand-tint);overflow:hidden;display:flex;margin-top:5px}
+.login{min-height:100vh;display:grid;place-items:center;padding:20px}
+.login .card{width:100%;max-width:380px;padding:28px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+/* ====================================================================
+   2. HELPERS
+   ==================================================================== */
+const { useState, useEffect, useMemo, useCallback } = React;
+const html = htm.bind(React.createElement);
+const C = window.CRM_CONFIG;
+const db = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_KEY);
+
+const STATUSES = ['New','Contacted','Interested','Confirmed','Programme scheduled','Programme completed','Not interested'];
+const TYPES = ['Call','School visit','Principal meeting','Coordinator meeting','WhatsApp','Email','Follow-up'];
+const OUTCOMES = ['Connected','No response','Interested','Call back later','Confirmed','Not interested'];
+const P_STATUSES = ['Tentative','Confirmed','Rescheduled','Cancelled','Completed'];
+const P_TYPES = ['At AIMER Campus','At school'];
+const CLOSED = ['Programme completed','Not interested'];
+const PAGE = 25;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const todayStr = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);   // India date
+const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const fDate = d => d ? `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}` : '—';
+const fShort = d => d ? `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]}` : '—';
+const fTime = t => { if (!t) return ''; let [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')} ${ap}`; };
+const weekday = d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d + 'T00:00:00Z').getUTCDay()];
+const badge = s => html`<span className=${'badge b-' + String(s).replace(/ /g, '-')}>${s}</span>`;
+const wa = n => n ? 'https://wa.me/' + n.replace(/\D/g, '').replace(/^0/, '').replace(/^(\d{10})$/, '91$1') : null;
+const tel = n => n ? 'tel:' + n.replace(/\s/g, '') : null;
+const clean = t => (t || '').replace(/[%,()]/g, ' ').trim();
+const followState = d => !d ? '' : d < todayStr() ? 'overdue' : d === todayStr() ? 'today' : '';
+const nice = e => {
+  const m = e?.message || String(e);
+  if (m.includes('one_school_per_place')) return 'This school already exists in this district and city.';
+  if (m.includes('one_school_per_phone')) return 'Another school already uses this phone number.';
+  if (m.includes('row-level security')) return 'You don’t have permission for this school.';
+  if (m.includes('reassign')) return 'Only managers can reassign schools.';
+  if (m.includes('next_follow_up_check')) return 'Next follow-up can’t be before the activity date.';
+  if (m.includes('programmes_check')) return 'To complete a programme, enter attended students and remarks.';
+  return m;
+};
+function exportExcel(name, sheets) {           // sheets = { 'Sheet name': [rows] }
+  const wb = XLSX.utils.book_new();
+  Object.entries(sheets).forEach(([n, rows]) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ Note: 'No records' }]), n.slice(0, 31)));
+  XLSX.writeFile(wb, `${name} ${todayStr()}.xlsx`);
+}
+async function fetchAll(query) {               // pages through >1000 rows
+  let out = [], from = 0;
+  for (;;) { const { data, error } = await query().range(from, from + 999); if (error) throw error; out = out.concat(data); if (data.length < 1000) return out; from += 1000; }
+}
+
+const I = {   // tiny inline icons
+  home: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>`,
+  school: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/></svg>`,
+  cal: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>`,
+  chart: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>`,
+  team: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c1-4 4-6 7-6s6 2 7 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2 1 3.4 3 4 6"/></svg>`,
+  phone: html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>`,
+  wa: html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21l1.6-4.8A9 9 0 1 1 8 19.6z"/></svg>`,
+};
+const Logo = () => html`<div className="logo"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="9" fill="#12355B"/><path d="M9 24 L17 9 L25 24" stroke="#C8932E" strokeWidth="3" fill="none" strokeLinejoin="round"/><path d="M12.5 19 H21.5" stroke="#fff" strokeWidth="2.4"/></svg><span>Young CEO 2.0<small>AIMER Business School</small></span></div>`;
+
+function Modal({ title, sub, onClose, children }) {
+  useEffect(() => { const k = e => e.key === 'Escape' && onClose(); addEventListener('keydown', k); return () => removeEventListener('keydown', k); }, []);
+  return html`<div className="veil" onClick=${onClose}><div className="sheet" role="dialog" aria-modal="true" aria-label=${title} onClick=${e => e.stopPropagation()}>
+    <div className="sheet-head"><div><h2>${title}</h2>${sub && html`<div className="soft small" style=${{ marginTop: 4 }}>${sub}</div>`}</div><button className="x" aria-label="Close" onClick=${onClose}>×</button></div>
+    ${children}</div></div>`;
+}
+const Field = ({ label, children, full }) => html`<label className=${'f' + (full ? ' full' : '')}><span>${label}</span>${children}</label>`;
+const Select = ({ value, onChange, options, blank, ...rest }) => html`<select className="input" value=${value ?? ''} onChange=${e => onChange(e.target.value)} ...${rest}>
+  ${blank !== undefined && html`<option value="">${blank}</option>`}${options.map(o => typeof o === 'string' ? html`<option key=${o}>${o}</option>` : html`<option key=${o.value} value=${o.value}>${o.label}</option>`)}</select>`;
+const useForm = init => { const [f, setF] = useState(init); return [f, k => v => setF(p => ({ ...p, [k]: v?.target ? v.target.value : v })), setF]; };
+
+/* ====================================================================
+   3. LOGIN
+   ==================================================================== */
+function Login({ recovery, onDone }) {
+  const [email, setEmail] = useState(''); const [pw, setPw] = useState('');
+  const [msg, setMsg] = useState(null); const [busy, setBusy] = useState(false);
+  const signIn = async e => {
+    e.preventDefault(); setBusy(true); setMsg(null);
+    const { error } = await db.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: pw });
+    setBusy(false); if (error) setMsg({ t: 'bad', m: 'Email or password is incorrect.' });
+  };
+  const reset = async () => {
+    if (!email) return setMsg({ t: 'bad', m: 'Type your email first.' });
+    await db.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: location.origin + location.pathname });
+    setMsg({ t: 'ok', m: 'If that email has an account, a reset link is on its way.' });
+  };
+  const setNew = async e => {
+    e.preventDefault(); if (pw.length < 8) return setMsg({ t: 'bad', m: 'Use at least 8 characters.' });
+    const { error } = await db.auth.updateUser({ password: pw });
+    if (error) setMsg({ t: 'bad', m: error.message }); else onDone();
+  };
+  return html`<div className="login"><div className="card">
+    <${Logo}/>
+    <h1 style=${{ marginTop: 24 }}>${recovery ? 'Set a new password' : 'Sign in'}</h1>
+    <p className="soft small" style=${{ margin: '4px 0 20px' }}>${recovery ? 'Choose a password with at least 8 characters.' : 'School outreach for the Aimer Young CEO Preliminary Programme.'}</p>
+    <form className="form" onSubmit=${recovery ? setNew : signIn}>
+      ${!recovery && html`<${Field} label="Email"><input className="input" type="email" autoComplete="email" required value=${email} onInput=${e => setEmail(e.target.value)} placeholder="name@aimerbschool.com"/><//>`}
+      <${Field} label=${recovery ? 'New password' : 'Password'}><input className="input" type="password" autoComplete=${recovery ? 'new-password' : 'current-password'} required value=${pw} onInput=${e => setPw(e.target.value)}/><//>
+      ${msg && html`<div className=${'msg ' + msg.t}>${msg.m}</div>`}
+      <button className="btn primary" disabled=${busy}>${busy ? 'Signing in…' : recovery ? 'Save password' : 'Sign in'}</button>
+      ${!recovery && html`<button type="button" className="btn" style=${{ border: 0 }} onClick=${reset}>Forgot password?</button>`}
+    </form></div></div>`;
+}
+
+/* ====================================================================
+   4. DASHBOARD
+   ==================================================================== */
+function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
+  const [d, setD] = useState(null);
+  const isMgr = me.role !== 'officer';
+  const load = useCallback(async () => {
+    const today = todayStr();
+    const [schools, progs, acts] = await Promise.all([
+      fetchAll(() => db.from('schools').select('id,name,city,district,status,officer_id,next_follow_up,phone,whatsapp,coordinator,principal,students')),
+      fetchAll(() => db.from('programmes').select('id,code,date,start_time,end_time,type,status,expected,actual,officer_id,venue,schools(name)')),
+      isMgr ? fetchAll(() => db.from('outreach').select('officer_id,type')) : Promise.resolve([]),
+    ]);
+    setD({ schools, progs, acts, today });
+  }, []);
+  useEffect(() => { load().catch(e => toast(nice(e))); }, []);
+  if (!d) return html`<p className="muted">Loading…</p>`;
+
+  const { schools, progs, acts, today } = d;
+  const count = f => schools.filter(f).length;
+  const confirmed = s => ['Confirmed','Programme scheduled','Programme completed'].includes(s.status);
+  const open = s => !CLOSED.includes(s.status);
+  const due = schools.filter(s => open(s) && s.next_follow_up && s.next_follow_up <= today).sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up));
+  const week = progs.filter(p => p.date >= today && p.date <= addDays(today, 7) && p.status !== 'Cancelled' && p.status !== 'Completed').sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
+  const done = progs.filter(p => p.status === 'Completed');
+  const total = schools.length || 1;
+  const stats = [
+    { n: schools.length, l: 'Schools connected', go: {} },
+    { n: count(s => s.status !== 'New'), l: 'Contacted', go: {} },
+    { n: count(s => s.status === 'Interested'), l: 'Interested', go: { status: 'Interested' } },
+    { n: count(confirmed), l: 'Confirmed', go: { status: 'Confirmed' } },
+    { n: done.length, l: 'Programmes done', tab: 'programmes' },
+    { n: due.filter(s => s.next_follow_up < today).length, l: 'Overdue follow-ups', alert: true, go: { follow: 'overdue' } },
+  ];
+  const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
+  const officers = team.filter(t => t.role !== 'admin' && t.active).map(t => {
+    const mine = schools.filter(s => s.officer_id === t.id), a = acts.filter(x => x.officer_id === t.id);
+    return { id: t.id, name: t.name, schools: mine.length, calls: a.filter(x => x.type === 'Call').length,
+      visits: a.filter(x => x.type === 'School visit').length, meetings: a.filter(x => x.type.includes('meeting')).length,
+      confirmed: mine.filter(confirmed).length, done: done.filter(p => p.officer_id === t.id).length,
+      pending: mine.filter(s => open(s) && s.next_follow_up && s.next_follow_up <= today).length };
+  }).sort((a, b) => b.confirmed - a.confirmed);
+  const districts = Object.entries(schools.reduce((m, s) => { (m[s.district] ||= []).push(s); return m; }, {}))
+    .map(([k, v]) => ({ k, n: v.length, c: v.filter(confirmed).length, t: v.filter(s => s.status !== 'New').length })).sort((a, b) => b.n - a.n);
+  const maxD = Math.max(1, ...districts.map(x => x.n));
+
+  return html`
+    <div className="head"><div><h1>Hello, ${me.name.split(' ')[0]}</h1><p>${isMgr ? 'Outreach across every officer and district.' : 'Your schools and follow-ups.'}</p></div>
+      <div className="row"><button className="btn gold" onClick=${() => go('schools', { add: true })}>+ Add school</button><button className="btn" onClick=${() => go('programmes', { add: true })}>Schedule programme</button></div></div>
+
+    <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert && s.n ? ' alert' : '')} onClick=${() => go(s.tab || 'schools', s.go || {})}>
+      <div className="num">${s.n}</div><p>${s.l}</p>${!s.alert && !s.tab && html`<div className="bar"><i style=${{ width: Math.round(s.n / total * 100) + '%' }}/></div>`}</button>`)}</div>
+    <p className="soft small" style=${{ margin: '-4px 0 18px' }}>
+      ${(n => n + (n === 1 ? ' follow-up' : ' follow-ups'))(due.filter(s => s.next_follow_up === today).length)} due today · ${(n => n + (n === 1 ? ' programme' : ' programmes'))(week.length)} in the next 7 days · ${done.reduce((a, p) => a + (p.actual || 0), 0).toLocaleString('en-IN')} students reached</p>
+
+    <div className="grid g2">
+      <div className="card"><div className="item"><h2 className="grow">Follow up now</h2><span className="muted small">${due.length}</span></div>
+        <div className="list">${due.slice(0, 10).map(s => html`<div key=${s.id} className="item">
+          <div className="grow click" onClick=${() => openSchool(s.id)}><div className="trunc" style=${{ fontWeight: 600 }}>${s.name}</div>
+            <div className="trunc small muted">${s.city}, ${s.district} · ${s.coordinator || s.principal || 'No contact'}${isMgr ? ' · ' + nameOf(s.officer_id) : ''}</div></div>
+          <span className=${'small ' + (s.next_follow_up < today ? 'bad' : 'warn')} style=${{ fontWeight: 700 }}>${s.next_follow_up < today ? fShort(s.next_follow_up) : 'Today'}</span>
+          ${s.phone && html`<a className="icon" href=${tel(s.phone)} aria-label="Call">${I.phone}</a>`}
+          ${(s.whatsapp || s.phone) && html`<a className="icon ok" href=${wa(s.whatsapp || s.phone)} target="_blank" aria-label="WhatsApp">${I.wa}</a>`}
+        </div>`)}
+        ${!due.length && html`<p className="pad muted small">Nothing due. Pick a New school and make the first call.</p>`}</div></div>
+
+      <div className="card"><div className="item"><h2 className="grow">Programmes this week</h2><button className="btn sm" onClick=${() => go('programmes')}>Calendar</button></div>
+        <div className="list">${week.map(p => html`<div key=${p.id} className="item click" onClick=${() => openProgramme(p.id)}>
+          <div style=${{ width: 84, flex: 'none' }} className="small"><b>${weekday(p.date)} ${fShort(p.date)}</b><div className="muted">${fTime(p.start_time)}</div></div>
+          <div className="grow"><div className="trunc" style=${{ fontWeight: 600 }}>${p.schools?.name}</div><div className="trunc small muted">${p.type} · ${p.expected} students</div></div>${badge(p.status)}</div>`)}
+        ${!week.length && html`<p className="pad muted small">No programmes in the next 7 days.</p>`}</div></div>
+    </div>
+
+    ${isMgr && html`<div className="grid g2" style=${{ marginTop: 16 }}>
+      <div className="card scroll"><div className="item"><h2>Officer performance</h2></div>
+        <table><thead><tr><th>Officer</th><th className="r">Schools</th><th className="r">Calls</th><th className="r">Visits</th><th className="r">Meetings</th><th className="r">Confirmed</th><th className="r">Done</th><th className="r">Pending</th></tr></thead>
+        <tbody>${officers.map(o => html`<tr key=${o.id}><td><b>${o.name}</b></td><td className="r">${o.schools}</td><td className="r">${o.calls}</td><td className="r">${o.visits}</td><td className="r">${o.meetings}</td><td className="r ok"><b>${o.confirmed}</b></td><td className="r">${o.done}</td><td className=${'r' + (o.pending ? ' bad' : '')}><b>${o.pending}</b></td></tr>`)}
+        ${!officers.length && html`<tr><td colSpan="8" className="muted">Add officers in the Team tab.</td></tr>`}</tbody></table></div>
+      <div className="card pad"><h2 style=${{ marginBottom: 14 }}>District coverage</h2><div className="dist">
+        ${districts.map(x => html`<div key=${x.k}><div className="row small" style=${{ justifyContent: 'space-between' }}><b>${x.k}</b><span className="muted">${x.c} confirmed of ${x.n}</span></div>
+          <div className="track" style=${{ width: Math.max(14, x.n / maxD * 100) + '%' }}><i style=${{ width: x.c / x.n * 100 + '%', background: 'var(--gold)' }}/><i style=${{ width: (x.t - x.c) / x.n * 100 + '%', background: 'color-mix(in srgb,var(--brand) 40%,transparent)' }}/></div></div>`)}
+        ${!districts.length && html`<p className="muted small">No schools yet.</p>`}</div>
+        <p className="muted small" style=${{ marginTop: 14 }}>Gold = confirmed · blue = contacted · pale = not yet contacted</p></div>
+    </div>`}`;
+}
+
+/* ====================================================================
+   5. SCHOOLS
+   ==================================================================== */
+function Schools({ me, team, params, openSchool, editSchool, refreshKey }) {
+  const isMgr = me.role !== 'officer';
+  const [q, setQ] = useState(''); const [status, setStatus] = useState(params.status || '');
+  const [district, setDistrict] = useState(''); const [officer, setOfficer] = useState(''); const [follow, setFollow] = useState(params.follow || '');
+  const [page, setPage] = useState(0); const [rows, setRows] = useState(null); const [total, setTotal] = useState(0);
+  useEffect(() => { if (params.add) editSchool(null); }, []);
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(async () => {
+      let x = db.from('schools').select('id,code,name,city,district,board,status,coordinator,principal,phone,officer_id,last_contact,next_follow_up', { count: 'exact' });
+      const s = clean(q); if (s) x = x.or(`name.ilike.%${s}%,code.ilike.%${s}%,city.ilike.%${s}%,phone.ilike.%${s}%,coordinator.ilike.%${s}%,principal.ilike.%${s}%`);
+      if (status === 'Confirmed') x = x.in('status', ['Confirmed','Programme scheduled','Programme completed']); else if (status) x = x.eq('status', status);
+      if (district) x = x.eq('district', district);
+      if (officer === 'none') x = x.is('officer_id', null); else if (officer) x = x.eq('officer_id', officer);
+      if (follow === 'today') x = x.eq('next_follow_up', todayStr());
+      if (follow === 'overdue') x = x.lt('next_follow_up', todayStr()).not('status', 'in', '("Programme completed","Not interested")');
+      const { data, count } = await x.order('created_at', { ascending: false }).range(page * PAGE, page * PAGE + PAGE - 1);
+      if (alive) { setRows(data || []); setTotal(count || 0); }
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q, status, district, officer, follow, page, refreshKey]);
+  useEffect(() => setPage(0), [q, status, district, officer, follow]);
+  const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
+  const pages = Math.max(1, Math.ceil(total / PAGE));
+
+  return html`
+    <div className="head"><div><h1>Schools</h1><p>${total} school${total === 1 ? '' : 's'}${isMgr ? '' : ' assigned to you'}</p></div>
+      <button className="btn primary" onClick=${() => editSchool(null)}>+ Add school</button></div>
+    <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', marginBottom: 14 }}>
+      <input className="input" placeholder="Search name, ID, city, phone…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
+      <${Select} value=${status} onChange=${setStatus} options=${STATUSES} blank="All statuses" aria-label="Status"/>
+      <${Select} value=${district} onChange=${setDistrict} options=${C.DISTRICTS} blank="All districts" aria-label="District"/>
+      ${isMgr && html`<${Select} value=${officer} onChange=${setOfficer} options=${[{ value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))]} blank="All officers" aria-label="Officer"/>`}
+      <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'today', label: 'Follow-up today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any follow-up" aria-label="Follow-up"/>
+    </div>
+    ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No schools match. Clear a filter or add a school.</div>` : html`
+      <div className="card list hide-lg">${rows.map(s => html`<div key=${s.id} className="item click" onClick=${() => openSchool(s.id)}>
+        <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${s.name}</b>${badge(s.status)}</div>
+        <div className="small muted">${s.code} · ${s.city}, ${s.district}</div>
+        <div className="small">Follow-up: <b className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}>${fDate(s.next_follow_up)}</b>${isMgr ? html`<span className="muted"> · ${nameOf(s.officer_id)}</span>` : ''}</div></div></div>`)}</div>
+      <div className="card scroll hide-sm"><table><thead><tr><th>School</th><th>District</th><th>Contact</th><th>Status</th>${isMgr && html`<th>Officer</th>`}<th>Last contact</th><th>Follow-up</th></tr></thead>
+        <tbody>${rows.map(s => html`<tr key=${s.id} className="click" onClick=${() => openSchool(s.id)}>
+          <td><b>${s.name}</b><div className="small muted">${s.code}${s.board ? ' · ' + s.board : ''}</div></td>
+          <td>${s.district}<div className="small muted">${s.city}</div></td>
+          <td>${s.coordinator || s.principal || '—'}<div className="small muted">${s.phone || ''}</div></td>
+          <td>${badge(s.status)}</td>${isMgr && html`<td>${nameOf(s.officer_id)}</td>`}
+          <td>${fDate(s.last_contact)}</td><td className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}><b>${fDate(s.next_follow_up)}</b></td></tr>`)}</tbody></table></div>
+      <div className="row" style=${{ justifyContent: 'space-between', marginTop: 12 }}><span className="small muted">Page ${page + 1} of ${pages}</span>
+        <div className="row"><button className="btn sm" disabled=${page === 0} onClick=${() => setPage(page - 1)}>Previous</button><button className="btn sm" disabled=${page + 1 >= pages} onClick=${() => setPage(page + 1)}>Next</button></div></div>`}`;
+}
+
+function SchoolForm({ me, team, school, onClose, onSaved }) {
+  const isMgr = me.role !== 'officer';
+  const [f, set] = useForm(school || { status: 'New', officer_id: isMgr ? '' : me.id });
+  const [dups, setDups] = useState([]); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [sure, setSure] = useState(false);
+  const check = async () => {
+    if (!f.name || f.name.length < 3 || !f.district) return;
+    const { data } = await db.rpc('find_duplicates', { p_name: f.name, p_district: f.district, p_phone: f.phone || null });
+    setDups((data || []).filter(d => d.code !== school?.code));
+  };
+  const save = async e => {
+    e.preventDefault(); setErr(null);
+    if (!school && dups.length && !sure) return setErr('Tick the box to confirm this is a different school.');
+    setBusy(true);
+    const row = { name: f.name?.trim(), district: f.district, city: f.city?.trim(), address: f.address || null, category: f.category || null, board: f.board || null,
+      principal: f.principal || null, coordinator: f.coordinator || null, phone: f.phone || null, whatsapp: f.whatsapp || null, email: f.email || null,
+      students: f.students === '' || f.students == null ? null : +f.students, source: f.source || null, status: f.status, next_follow_up: f.next_follow_up || null, remarks: f.remarks || null };
+    if (isMgr) row.officer_id = f.officer_id || null;
+    const res = school ? await db.from('schools').update(row).eq('id', school.id).select('id').single() : await db.from('schools').insert(row).select('id').single();
+    setBusy(false);
+    if (res.error) setErr(nice(res.error)); else onSaved(res.data.id);
+  };
+  return html`<${Modal} title=${school ? 'Edit ' + school.name : 'Add school'} sub=${school ? school.code : 'A unique school ID is created automatically.'} onClose=${onClose}>
+    <form className="form two" onSubmit=${save}>
+      <${Field} label="School name *" full><input className="input" required minLength="3" value=${f.name || ''} onInput=${set('name')} onBlur=${check}/><//>
+      <${Field} label="District *"><${Select} required value=${f.district} onChange=${v => { set('district')(v); setTimeout(check, 0); }} options=${C.DISTRICTS} blank="Choose…"/><//>
+      <${Field} label="City / town *"><input className="input" required value=${f.city || ''} onInput=${set('city')}/><//>
+      <${Field} label="Address" full><input className="input" value=${f.address || ''} onInput=${set('address')}/><//>
+      <${Field} label="Category"><${Select} value=${f.category} onChange=${set('category')} options=${C.CATEGORIES} blank="—"/><//>
+      <${Field} label="Board"><${Select} value=${f.board} onChange=${set('board')} options=${C.BOARDS} blank="—"/><//>
+      <${Field} label="Principal"><input className="input" value=${f.principal || ''} onInput=${set('principal')}/><//>
+      <${Field} label="Coordinator"><input className="input" value=${f.coordinator || ''} onInput=${set('coordinator')}/><//>
+      <${Field} label="Contact number"><input className="input" type="tel" value=${f.phone || ''} onInput=${set('phone')} onBlur=${check}/><//>
+      <${Field} label="WhatsApp number"><input className="input" type="tel" value=${f.whatsapp || ''} onInput=${set('whatsapp')}/><//>
+      <${Field} label="Email"><input className="input" type="email" value=${f.email || ''} onInput=${set('email')}/><//>
+      <${Field} label="Student strength"><input className="input" type="number" min="0" value=${f.students ?? ''} onInput=${set('students')}/><//>
+      <${Field} label="Assigned officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))} blank="Unassigned"/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
+      <${Field} label="Lead source"><${Select} value=${f.source} onChange=${set('source')} options=${C.SOURCES} blank="—"/><//>
+      <${Field} label="Status"><${Select} value=${f.status} onChange=${set('status')} options=${STATUSES}/><//>
+      <${Field} label="Next follow-up"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
+      <${Field} label="Remarks" full><textarea className="input" rows="3" value=${f.remarks || ''} onInput=${set('remarks')}/><//>
+      ${dups.length > 0 && html`<div className="msg warn full"><b>Possible duplicate</b>${dups.map(d => html`<div key=${d.code}>${d.code} · ${d.name}, ${d.city}${d.owner ? ' (owned by ' + d.owner + ')' : ''}</div>`)}
+        ${!school && html`<label className="row" style=${{ marginTop: 8, color: 'var(--ink)' }}><input type="checkbox" checked=${sure} onChange=${e => setSure(e.target.checked)}/> This is a different school — save anyway</label>`}</div>`}
+      ${err && html`<div className="msg bad full">${err}</div>`}
+      <div className="row full"><button className="btn primary" disabled=${busy}>${busy ? 'Saving…' : school ? 'Save changes' : 'Add school'}</button><button type="button" className="btn" onClick=${onClose}>Cancel</button></div>
+    </form><//>`;
+}
+
+function OutreachForm({ me, team, schoolId, onSaved }) {
+  const [f, set, setF] = useForm({ type: 'Call', done_on: todayStr(), outcome: 'Connected', remarks: '', next_follow_up: addDays(todayStr(), 3), officer_id: me.id });
+  const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
+  const save = async e => {
+    e.preventDefault(); setErr(null);
+    if (f.next_follow_up < f.done_on) return setErr('Next follow-up can’t be before the activity date.');
+    setBusy(true);
+    const { error } = await db.from('outreach').insert({ school_id: schoolId, type: f.type, done_on: f.done_on, outcome: f.outcome, remarks: f.remarks.trim(), next_follow_up: f.next_follow_up, officer_id: me.role === 'officer' ? me.id : f.officer_id });
+    setBusy(false);
+    if (error) setErr(nice(error)); else { setF(p => ({ ...p, remarks: '' })); onSaved(); }
+  };
+  return html`<form className="form" onSubmit=${save}>
+    <div className="chips" role="radiogroup" aria-label="Activity">${TYPES.map(t => html`<button type="button" key=${t} role="radio" aria-checked=${f.type === t} className=${'chip' + (f.type === t ? ' on' : '')} onClick=${() => set('type')(t)}>${t}</button>`)}</div>
+    <div className="form two">
+      <${Field} label="Date"><input className="input" type="date" max=${todayStr()} required value=${f.done_on} onInput=${set('done_on')}/><//>
+      <${Field} label="Outcome"><${Select} value=${f.outcome} onChange=${set('outcome')} options=${OUTCOMES}/><//>
+      ${me.role !== 'officer' && html`<${Field} label="Officer"><${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))}/><//>`}
+      <${Field} label="Next follow-up *"><input className="input" type="date" required value=${f.next_follow_up} onInput=${set('next_follow_up')}/><//>
+      <${Field} label="Remarks *" full><textarea className="input" rows="2" required placeholder="Who you spoke to and what they said" value=${f.remarks} onInput=${set('remarks')}/><//>
+    </div>
+    ${err && html`<div className="msg bad">${err}</div>`}
+    <div><button className="btn primary" disabled=${busy}>${busy ? 'Saving…' : 'Save outreach'}</button></div></form>`;
+}
+
+function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProgramme, toast, bump }) {
+  const [s, setS] = useState(null); const [hist, setHist] = useState([]); const [progs, setProgs] = useState([]);
+  const load = async () => {
+    const [a, b, c] = await Promise.all([
+      db.from('schools').select('*').eq('id', id).single(),
+      db.from('outreach').select('*').eq('school_id', id).order('done_on', { ascending: false }).order('created_at', { ascending: false }),
+      db.from('programmes').select('id,code,date,start_time,type,status,expected,actual').eq('school_id', id).order('date', { ascending: false }),
+    ]);
+    if (a.error) { toast('This school isn’t available to you.'); return onClose(); }
+    setS(a.data); setHist(b.data || []); setProgs(c.data || []);
+  };
+  useEffect(() => { load(); }, [id]);
+  const del = async () => { if (!confirm('Delete this school and all its outreach and programmes? This cannot be undone.')) return;
+    const { error } = await db.from('schools').delete().eq('id', id); if (error) toast(nice(error)); else { toast('School deleted'); bump(); onClose(); } };
+  if (!s) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
+  const nameOf = x => team.find(t => t.id === x)?.name || 'Unassigned';
+  const fs = followState(s.next_follow_up);
+  const info = [['School ID', s.code], ['City', s.city + ', ' + s.district], ['Address', s.address], ['Category / board', [s.category, s.board].filter(Boolean).join(' · ')],
+    ['Principal', s.principal], ['Coordinator', s.coordinator], ['Phone', s.phone], ['WhatsApp', s.whatsapp], ['Email', s.email], ['Students', s.students],
+    ['Officer', nameOf(s.officer_id)], ['Lead source', s.source], ['Last contact', fDate(s.last_contact)], ['Remarks', s.remarks]];
+  return html`<${Modal} title=${s.name} sub=${html`${badge(s.status)} <span style=${{ marginLeft: 6 }}>${s.code} · ${s.city}</span>`} onClose=${onClose}>
+    <div className="row" style=${{ marginBottom: 14 }}>
+      ${s.phone && html`<a className="btn" href=${tel(s.phone)}>${I.phone} Call</a>`}
+      ${(s.whatsapp || s.phone) && html`<a className="btn" href=${wa(s.whatsapp || s.phone)} target="_blank">${I.wa} WhatsApp</a>`}
+      <button className="btn" onClick=${() => editSchool(s)}>Edit</button>
+      <button className="btn gold" onClick=${() => scheduleFor(s)}>Schedule programme</button></div>
+    <div className=${'msg ' + (fs === 'overdue' ? 'bad' : fs === 'today' ? 'warn' : 'ok')} style=${{ marginBottom: 16 }}>Next follow-up: <b>${fDate(s.next_follow_up)}</b>${fs === 'overdue' ? ' — overdue' : fs === 'today' ? ' — today' : ''}</div>
+    <h3 style=${{ marginBottom: 10 }}>Log outreach</h3>
+    <${OutreachForm} me=${me} team=${team} schoolId=${s.id} onSaved=${() => { toast('Outreach saved'); load(); bump(); }}/>
+    <h3 style=${{ margin: '22px 0 10px' }}>Programmes</h3>
+    ${progs.length ? html`<div className="card list">${progs.map(p => html`<div key=${p.id} className="item click" onClick=${() => openProgramme(p.id)}><div className="grow"><b>${fDate(p.date)}, ${fTime(p.start_time)}</b><div className="small muted">${p.code} · ${p.type} · ${p.actual ?? p.expected} students</div></div>${badge(p.status)}</div>`)}</div>`
+      : html`<p className="muted small">No programme yet.</p>`}
+    <h3 style=${{ margin: '22px 0 10px' }}>History</h3>
+    ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type} · ${h.outcome}</b><div className="small muted">${fDate(h.done_on)} · ${nameOf(h.officer_id)} · next ${fShort(h.next_follow_up)}</div><div className="small">${h.remarks}</div></div>`)}</div>` : html`<p className="muted small">No outreach logged yet.</p>`}
+    <h3 style=${{ margin: '22px 0 10px' }}>Details</h3>
+    <div className="card list">${info.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 120, flex: 'none' }}>${k}</span><span>${v || '—'}</span></div>`)}</div>
+    ${me.role === 'admin' && html`<button className="btn danger" style=${{ marginTop: 16 }} onClick=${del}>Delete school</button>`}
+  <//>`;
+}
+
+/* ====================================================================
+   6. PROGRAMMES + CALENDAR
+   ==================================================================== */
+function Programmes({ me, team, params, openProgramme, newProgramme, refreshKey }) {
+  const [view, setView] = useState(innerWidth < 760 ? 'week' : 'month');
+  const [anchor, setAnchor] = useState(todayStr());
+  const [rows, setRows] = useState([]); const [filter, setFilter] = useState('');
+  useEffect(() => { if (params.add) newProgramme(null); }, []);
+  // visible range
+  const range = useMemo(() => {
+    if (view === 'day') return [anchor, anchor];
+    if (view === 'list') return [addDays(todayStr(), -60), addDays(todayStr(), 120)];
+    const dow = d => (new Date(d + 'T00:00:00Z').getUTCDay() + 6) % 7; // Monday = 0
+    if (view === 'week') { const s = addDays(anchor, -dow(anchor)); return [s, addDays(s, 6)]; }
+    const first = anchor.slice(0, 8) + '01'; const s = addDays(first, -dow(first));
+    const nextMonth = addDays(first, 32).slice(0, 8) + '01'; const last = addDays(nextMonth, -1);
+    return [s, addDays(last, 6 - dow(last))];
+  }, [view, anchor]);
+  useEffect(() => {
+    db.from('programmes').select('*, schools(name,district)').gte('date', range[0]).lte('date', range[1]).order('date').order('start_time')
+      .then(({ data }) => setRows(data || []));
+  }, [range[0], range[1], refreshKey]);
+  const shown = rows.filter(p => filter ? p.type === filter : true).filter(p => view === 'list' || p.status !== 'Cancelled');
+  const byDay = shown.reduce((m, p) => { (m[p.date] ||= []).push(p); return m; }, {});
+  const days = []; for (let d = range[0]; d <= range[1]; d = addDays(d, 1)) days.push(d);
+  const step = n => setAnchor(view === 'month' ? addDays(anchor.slice(0, 8) + '15', 30 * n).slice(0, 8) + '01' : addDays(anchor, (view === 'week' ? 7 : 1) * n));
+  const title = view === 'month' ? `${MONTHS[+anchor.slice(5, 7) - 1]} ${anchor.slice(0, 4)}` : view === 'day' ? `${weekday(anchor)}, ${fDate(anchor)}` : view === 'week' ? `${fShort(range[0])} – ${fDate(range[1])}` : 'Last 60 days and next 4 months';
+  const cls = p => 'ev ' + (p.status === 'Completed' ? 'done' : p.type === 'At AIMER Campus' ? 'campus' : 'school');
+  const today = todayStr();
+  const nameOf = id => team.find(t => t.id === id)?.name || '';
+
+  const agenda = list => html`<div className="grid">${list.filter(d => byDay[d] || view === 'day').map(d => html`<div key=${d}>
+    <div className=${'small ' + (d === today ? 'warn' : 'soft')} style=${{ fontWeight: 700, marginBottom: 6 }}>${weekday(d)}, ${fDate(d)}${d === today ? ' · Today' : ''}</div>
+    ${(byDay[d] || []).map(p => html`<button key=${p.id} className=${cls(p)} style=${{ padding: 12, fontSize: 14, whiteSpace: 'normal' }} onClick=${() => openProgramme(p.id)}>
+      <div className="row" style=${{ justifyContent: 'space-between' }}><b>${fTime(p.start_time)}–${fTime(p.end_time)} · ${p.schools?.name}</b>${badge(p.status)}</div>
+      <div className="small soft" style=${{ fontWeight: 500 }}>${p.type} · ${p.venue} · ${nameOf(p.officer_id)} · ${p.actual ?? p.expected} students</div></button>`)}
+    ${!byDay[d] && html`<p className="muted small">Nothing scheduled.</p>`}</div>`)}
+    ${!list.some(d => byDay[d]) && view !== 'day' && html`<div className="card pad muted">No programmes in this period.</div>`}</div>`;
+
+  return html`
+    <div className="head"><div><h1>Programmes</h1><p>Aimer Young CEO Preliminary Programme — at AIMER Campus or at the school.</p></div>
+      <button className="btn gold" onClick=${() => newProgramme(null)}>+ Schedule programme</button></div>
+    <div className="row" style=${{ justifyContent: 'space-between', marginBottom: 12 }}>
+      <div className="row">${view !== 'list' && html`<button className="btn sm" aria-label="Previous" onClick=${() => step(-1)}>‹</button><button className="btn sm" onClick=${() => setAnchor(todayStr())}>Today</button><button className="btn sm" aria-label="Next" onClick=${() => step(1)}>›</button>`}<h2 style=${{ marginLeft: 6 }}>${title}</h2></div>
+      <div className="row"><${Select} value=${filter} onChange=${setFilter} options=${P_TYPES} blank="Campus + school" aria-label="Type" style=${{ width: 'auto', padding: '6px 10px' }}/>
+        <div className="seg">${['month','week','day','list'].map(v => html`<button key=${v} className=${view === v ? 'on' : ''} onClick=${() => setView(v)}>${v[0].toUpperCase() + v.slice(1)}</button>`)}</div></div>
+    </div>
+    <p className="small soft" style=${{ marginBottom: 10 }}><span className="ev campus" style=${{ display: 'inline', marginRight: 6 }}>At AIMER Campus</span><span className="ev school" style=${{ display: 'inline', marginRight: 6 }}>At school</span><span className="ev done" style=${{ display: 'inline' }}>Completed</span></p>
+    ${view === 'month' ? html`<div className="card hide-sm" style=${{ overflow: 'hidden' }}><div className="cal">
+        ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => html`<div key=${d} className="dow">${d}</div>`)}
+        ${days.map(d => html`<div key=${d} className=${'day' + (d.slice(0, 7) !== anchor.slice(0, 7) ? ' off' : '')}>
+          <button className=${'dnum' + (d === today ? ' today' : '')} style=${{ border: 0, background: d === today ? 'var(--gold)' : 'none', cursor: 'pointer' }} onClick=${() => { setAnchor(d); setView('day'); }}>${+d.slice(8)}</button>
+          ${(byDay[d] || []).slice(0, 3).map(p => html`<button key=${p.id} className=${cls(p)} onClick=${() => openProgramme(p.id)}>${fTime(p.start_time)} ${p.schools?.name}</button>`)}
+          ${(byDay[d] || []).length > 3 && html`<button className="small" style=${{ border: 0, background: 'none', color: 'var(--brand)', fontWeight: 700, cursor: 'pointer' }} onClick=${() => { setAnchor(d); setView('day'); }}>+${byDay[d].length - 3} more</button>`}
+        </div>`)}</div></div>
+      <div className="hide-lg">${agenda(days.filter(d => d.slice(0, 7) === anchor.slice(0, 7)))}</div>`
+    : view === 'list' ? html`<div className="card scroll"><table><thead><tr><th>Date</th><th>School</th><th>Type</th><th>Officer</th><th className="r">Students</th><th>Status</th></tr></thead>
+        <tbody>${shown.map(p => html`<tr key=${p.id} className="click" onClick=${() => openProgramme(p.id)}><td><b>${fDate(p.date)}</b><div className="small muted">${fTime(p.start_time)} · ${p.code}</div></td><td>${p.schools?.name}</td><td>${p.type}</td><td>${nameOf(p.officer_id)}</td><td className="r">${p.actual ?? p.expected}</td><td>${badge(p.status)}</td></tr>`)}
+        ${!shown.length && html`<tr><td colSpan="6" className="muted">No programmes yet.</td></tr>`}</tbody></table></div>`
+    : agenda(days)}`;
+}
+
+function SchoolPicker({ value, onPick }) {
+  const [q, setQ] = useState(value ? value.name : ''); const [opts, setOpts] = useState([]);
+  useEffect(() => {
+    if (value && q === value.name) return;
+    const t = setTimeout(async () => { const s = clean(q); if (s.length < 2) return setOpts([]);
+      const { data } = await db.from('schools').select('id,name,code,city,district,address,coordinator,phone,whatsapp,officer_id').or(`name.ilike.%${s}%,code.ilike.%${s}%`).limit(8); setOpts(data || []); }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  return html`<div style=${{ position: 'relative' }}><input className="input" placeholder="Type school name or ID" value=${q} onInput=${e => { setQ(e.target.value); onPick(null); }} aria-label="School"/>
+    ${opts.length > 0 && !value && html`<div className="card list" style=${{ position: 'absolute', zIndex: 5, left: 0, right: 0, marginTop: 4, maxHeight: 260, overflow: 'auto' }}>
+      ${opts.map(o => html`<div key=${o.id} className="item click small" onClick=${() => { onPick(o); setQ(o.name); setOpts([]); }}><b>${o.name}</b><span className="muted">${o.code} · ${o.district}</span></div>`)}</div>`}</div>`;
+}
+
+function ProgrammeForm({ me, team, programme, school, onClose, onSaved }) {
+  const isMgr = me.role !== 'officer';
+  const [sch, setSch] = useState(school || (programme && programme.schools ? { id: programme.school_id, ...programme.schools } : null));
+  const [f, set, setF] = useForm(programme || { type: 'At AIMER Campus', venue: C.CAMPUS_VENUE, address: C.CAMPUS_ADDRESS, start_time: '10:00', end_time: '12:30', status: 'Tentative', officer_id: school?.officer_id || me.id });
+  const [clash, setClash] = useState([]); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [anyway, setAnyway] = useState(false);
+  const pickType = t => setF(p => ({ ...p, type: t, ...(t === 'At AIMER Campus' ? { venue: C.CAMPUS_VENUE, address: C.CAMPUS_ADDRESS } : { venue: sch?.name || '', address: [sch?.address, sch?.city, sch?.district].filter(Boolean).join(', ') }) }));
+  const pickSchool = s => { setSch(s); if (s) setF(p => ({ ...p, coordinator: p.coordinator || s.coordinator || '', officer_id: s.officer_id || p.officer_id, ...(p.type === 'At school' ? { venue: s.name, address: [s.address, s.city, s.district].filter(Boolean).join(', ') } : {}) })); };
+  const save = async e => {
+    e.preventDefault(); setErr(null);
+    if (!sch) return setErr('Choose a school.');
+    if (f.end_time <= f.start_time) return setErr('End time must be after start time.');
+    setBusy(true);
+    const officer = isMgr ? f.officer_id : me.id;
+    if (f.status !== 'Cancelled' && !anyway) {
+      const { data } = await db.rpc('programme_clashes', { p_date: f.date, p_start: f.start_time, p_end: f.end_time, p_officer: officer, p_type: f.type, p_exclude: programme?.id || null });
+      if (data?.length) { setClash(data); setBusy(false); return; }
+    }
+    const moved = programme && (programme.date !== f.date || programme.start_time.slice(0, 5) !== f.start_time.slice(0, 5));
+    const row = { school_id: sch.id, type: f.type, date: f.date, start_time: f.start_time, end_time: f.end_time, venue: f.venue, address: f.address,
+      expected: +f.expected, officer_id: officer, coordinator: f.coordinator || null, notes: f.notes || null, files_link: f.files_link || null,
+      status: moved && ['Tentative','Confirmed'].includes(f.status) ? 'Rescheduled' : f.status };
+    const res = programme ? await db.from('programmes').update(row).eq('id', programme.id).select('id').single() : await db.from('programmes').insert(row).select('id').single();
+    setBusy(false);
+    if (res.error) setErr(nice(res.error)); else onSaved(res.data.id);
+  };
+  return html`<${Modal} title=${programme ? 'Edit / reschedule ' + programme.code : 'Schedule programme'} sub="We check officer and AIMER Campus availability before saving." onClose=${onClose}>
+    <form className="form two" onSubmit=${save}>
+      <${Field} label="School *" full>${school || programme ? html`<input className="input" disabled value=${sch?.name || ''}/>` : html`<${SchoolPicker} value=${sch} onPick=${pickSchool}/>`}<//>
+      <div className="full chips" style=${{ gridTemplateColumns: '1fr 1fr' }}>${P_TYPES.map(t => html`<button type="button" key=${t} className=${'chip' + (f.type === t ? ' on' : '')} style=${{ padding: 14, textAlign: 'left' }} onClick=${() => pickType(t)}>
+        ${t}<div className="small" style=${{ fontWeight: 400, marginTop: 2 }}>${t === 'At AIMER Campus' ? 'School brings students to AIMER' : 'Our team runs it at the school'}</div></button>`)}</div>
+      <${Field} label="Venue *"><input className="input" required value=${f.venue || ''} onInput=${set('venue')}/><//>
+      <${Field} label="Full address *"><input className="input" required value=${f.address || ''} onInput=${set('address')}/><//>
+      <${Field} label="Date *"><input className="input" type="date" required value=${f.date || ''} onInput=${set('date')}/><//>
+      <div className="form two" style=${{ gap: 10 }}><${Field} label="Starts *"><input className="input" type="time" required value=${(f.start_time || '').slice(0, 5)} onInput=${set('start_time')}/><//>
+        <${Field} label="Ends *"><input className="input" type="time" required value=${(f.end_time || '').slice(0, 5)} onInput=${set('end_time')}/><//></div>
+      <${Field} label="Expected students *"><input className="input" type="number" min="1" required value=${f.expected ?? ''} onInput=${set('expected')}/><//>
+      <${Field} label="Outreach officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))}/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
+      <${Field} label="School coordinator"><input className="input" value=${f.coordinator || ''} onInput=${set('coordinator')}/><//>
+      <${Field} label="Status"><${Select} value=${f.status} onChange=${set('status')} options=${P_STATUSES.filter(s => s !== 'Completed')}/><//>
+      <${Field} label="Internal notes" full><textarea className="input" rows="2" value=${f.notes || ''} onInput=${set('notes')} placeholder="Transport, speakers, materials…"/><//>
+      <${Field} label="Photos & documents folder (Google Drive link)" full><input className="input" type="url" value=${f.files_link || ''} onInput=${set('files_link')} placeholder="https://drive.google.com/…"/><//>
+      ${clash.length > 0 && html`<div className="msg warn full"><b>Time clash</b>${clash.map(c => html`<div key=${c.code}>${c.reason}: ${c.school} (${c.code}) at ${fTime(c.start_time)}</div>`)}
+        <label className="row" style=${{ marginTop: 8, color: 'var(--ink)' }}><input type="checkbox" checked=${anyway} onChange=${e => setAnyway(e.target.checked)}/> Schedule anyway</label></div>`}
+      ${err && html`<div className="msg bad full">${err}</div>`}
+      <div className="row full"><button className="btn primary" disabled=${busy}>${busy ? 'Checking…' : programme ? 'Save' : 'Schedule'}</button><button type="button" className="btn" onClick=${onClose}>Cancel</button></div>
+    </form><//>`;
+}
+
+function ProgrammeDetail({ me, team, id, onClose, editProgramme, openSchool, toast, bump }) {
+  const [p, setP] = useState(null); const [actual, setActual] = useState(''); const [remarks, setRemarks] = useState(''); const [link, setLink] = useState('');
+  const load = async () => { const { data, error } = await db.from('programmes').select('*, schools(name,code,city,district,address,coordinator,phone,whatsapp,officer_id)').eq('id', id).single();
+    if (error) { toast('This programme isn’t available to you.'); return onClose(); } setP(data); setActual(data.actual ?? data.expected); setLink(data.files_link || ''); };
+  useEffect(() => { load(); }, [id]);
+  if (!p) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
+  const canEdit = me.role !== 'officer' || p.officer_id === me.id;
+  const update = async (row, msg) => { const { error } = await db.from('programmes').update(row).eq('id', id); if (error) toast(nice(error)); else { toast(msg); load(); bump(); } };
+  const live = !['Completed','Cancelled'].includes(p.status);
+  return html`<${Modal} title=${p.schools?.name} sub=${html`${badge(p.status)} <span style=${{ marginLeft: 6 }}>${p.code} · ${p.type}</span>`} onClose=${onClose}>
+    <div className="card pad" style=${{ marginBottom: 14 }}>
+      <div className="num" style=${{ fontSize: 22, fontWeight: 700 }}>${weekday(p.date)}, ${fDate(p.date)} · ${fTime(p.start_time)}–${fTime(p.end_time)}</div>
+      <p style=${{ margin: '8px 0 0' }}><b>${p.venue}</b><br/><span className="soft">${p.address}</span> · <a href=${'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(p.address)} target="_blank">Map</a></p>
+      <div className="row small" style=${{ marginTop: 12, gap: 18 }}><span>Expected <b>${p.expected}</b></span><span>Attended <b>${p.actual ?? '—'}</b></span><span>Officer <b>${team.find(t => t.id === p.officer_id)?.name || '—'}</b></span><span>Coordinator <b>${p.coordinator || '—'}</b></span></div>
+      ${p.notes && html`<p className="small soft" style=${{ marginBottom: 0 }}><b>Notes:</b> ${p.notes}</p>`}
+      ${p.completion_remarks && html`<p className="small" style=${{ marginBottom: 0 }}><b>Completion remarks:</b> ${p.completion_remarks}</p>`}
+      ${p.files_link && html`<p className="small" style=${{ marginBottom: 0 }}><a href=${p.files_link} target="_blank">Open photos & documents folder</a></p>`}
+    </div>
+    <div className="row" style=${{ marginBottom: 16 }}>
+      ${canEdit && live && html`<button className="btn" onClick=${() => editProgramme(p)}>Edit / reschedule</button>`}
+      ${canEdit && live && p.status !== 'Confirmed' && html`<button className="btn" onClick=${() => update({ status: 'Confirmed' }, 'Marked confirmed')}>Mark confirmed</button>`}
+      ${canEdit && live && html`<button className="btn danger" onClick=${() => confirm('Cancel this programme?') && update({ status: 'Cancelled' }, 'Programme cancelled')}>Cancel</button>`}
+      <button className="btn" onClick=${() => openSchool(p.school_id)}>Open school</button></div>
+    ${canEdit && live && html`<div className="card pad"><h3 style=${{ marginBottom: 10 }}>Mark completed</h3><div className="form two">
+      <${Field} label="Students who attended *"><input className="input" type="number" min="0" value=${actual} onInput=${e => setActual(e.target.value)}/><//>
+      <${Field} label="Photos & documents folder"><input className="input" type="url" value=${link} onInput=${e => setLink(e.target.value)} placeholder="Google Drive link"/><//>
+      <${Field} label="Completion remarks *" full><textarea className="input" rows="2" value=${remarks} onInput=${e => setRemarks(e.target.value)} placeholder="How it went, registrations, next steps"/><//>
+      <div><button className="btn primary" onClick=${() => { if (actual === '' || remarks.trim().length < 3) return toast('Enter attendance and remarks'); update({ status: 'Completed', actual: +actual, completion_remarks: remarks.trim(), files_link: link || null }, 'Programme completed'); }}>Mark completed</button></div></div></div>`}
+  <//>`;
+}
+
+/* ====================================================================
+   7. REPORTS (Excel export) + IMPORT
+   ==================================================================== */
+const REPORTS = [
+  ['schools', 'School outreach', 'Every school with contacts, status, officer and follow-up'],
+  ['district', 'District-wise', 'Schools, contacted, interested, confirmed and completed by district'],
+  ['officers', 'Officer performance', 'Schools, calls, visits, meetings, confirmations, programmes, pending follow-ups'],
+  ['inout', 'Inbound vs outbound', 'Programmes at AIMER Campus vs at schools, by status and students'],
+  ['programmes', 'Upcoming & completed programmes', 'Two sheets: upcoming and completed'],
+  ['followups', 'Follow-ups pending', 'Schools due today or overdue, oldest first'],
+  ['outreach', 'Outreach log', 'Every call, visit, meeting and message'],
+];
+async function buildReport(key, team) {
+  const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
+  const today = todayStr();
+  const confirmed = s => ['Confirmed','Programme scheduled','Programme completed'].includes(s.status);
+  if (key === 'schools' || key === 'district' || key === 'followups' || key === 'officers') {
+    const S = await fetchAll(() => db.from('schools').select('*').order('district').order('name'));
+    if (key === 'schools') return { Schools: S.map(s => ({ 'School ID': s.code, 'School name': s.name, District: s.district, City: s.city, Address: s.address, Category: s.category, Board: s.board,
+      Principal: s.principal, Coordinator: s.coordinator, Phone: s.phone, WhatsApp: s.whatsapp, Email: s.email, Students: s.students, Officer: nameOf(s.officer_id),
+      'Lead source': s.source, Status: s.status, 'Last contact': s.last_contact, 'Next follow-up': s.next_follow_up, Remarks: s.remarks })) };
+    if (key === 'district') return { Districts: Object.entries(S.reduce((m, s) => { (m[s.district] ||= []).push(s); return m; }, {})).map(([d, l]) => ({
+      District: d, Schools: l.length, Contacted: l.filter(s => s.status !== 'New').length, Interested: l.filter(s => s.status === 'Interested').length,
+      Confirmed: l.filter(confirmed).length, 'Programmes completed': l.filter(s => s.status === 'Programme completed').length,
+      'Conversion %': Math.round(l.filter(confirmed).length / l.length * 100), 'Student strength': l.reduce((a, s) => a + (s.students || 0), 0) })).sort((a, b) => b.Schools - a.Schools) };
+    if (key === 'followups') return { 'Follow-ups pending': S.filter(s => !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up <= today)
+      .sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up)).map(s => ({ 'School ID': s.code, School: s.name, District: s.district, Contact: s.coordinator || s.principal, Phone: s.phone,
+        Officer: nameOf(s.officer_id), Status: s.status, 'Last contact': s.last_contact, 'Due': s.next_follow_up, 'Days overdue': Math.round((Date.parse(today) - Date.parse(s.next_follow_up)) / 864e5) })) };
+    const [A, P] = await Promise.all([fetchAll(() => db.from('outreach').select('officer_id,type')), fetchAll(() => db.from('programmes').select('officer_id,status,actual'))]);
+    return { Officers: team.filter(t => t.role !== 'admin').map(t => { const mine = S.filter(s => s.officer_id === t.id), a = A.filter(x => x.officer_id === t.id), p = P.filter(x => x.officer_id === t.id && x.status === 'Completed');
+      return { Officer: t.name, Active: t.active ? 'Yes' : 'No', Schools: mine.length, Calls: a.filter(x => x.type === 'Call').length, Visits: a.filter(x => x.type === 'School visit').length,
+        Meetings: a.filter(x => x.type.includes('meeting')).length, 'WhatsApp / email / follow-ups': a.filter(x => ['WhatsApp','Email','Follow-up'].includes(x.type)).length,
+        Confirmed: mine.filter(confirmed).length, 'Programmes completed': p.length, 'Students reached': p.reduce((s, x) => s + (x.actual || 0), 0),
+        'Pending follow-ups': mine.filter(s => !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up <= today).length }; }) };
+  }
+  if (key === 'outreach') { const A = await fetchAll(() => db.from('outreach').select('*, schools(code,name,district)').order('done_on', { ascending: false }));
+    return { Outreach: A.map(a => ({ Date: a.done_on, 'School ID': a.schools?.code, School: a.schools?.name, District: a.schools?.district, Activity: a.type, Outcome: a.outcome, Officer: nameOf(a.officer_id), Remarks: a.remarks, 'Next follow-up': a.next_follow_up })) }; }
+  const P = await fetchAll(() => db.from('programmes').select('*, schools(code,name,district)').order('date'));
+  if (key === 'inout') return { 'Inbound vs outbound': P_TYPES.map(t => { const l = P.filter(p => p.type === t), r = { Type: t === 'At AIMER Campus' ? 'Inbound — at AIMER Campus' : 'Outbound — at school', Total: l.length };
+    P_STATUSES.forEach(s => r[s] = l.filter(p => p.status === s).length); r['Expected students'] = l.reduce((a, p) => a + p.expected, 0); r['Students attended'] = l.reduce((a, p) => a + (p.actual || 0), 0); return r; }) };
+  const row = p => ({ 'Programme ID': p.code, 'School ID': p.schools?.code, School: p.schools?.name, District: p.schools?.district, Type: p.type, Date: p.date, Start: p.start_time?.slice(0, 5), End: p.end_time?.slice(0, 5),
+    Venue: p.venue, Address: p.address, Expected: p.expected, Attended: p.actual, Officer: nameOf(p.officer_id), Coordinator: p.coordinator, Status: p.status, Notes: p.notes, 'Completion remarks': p.completion_remarks, 'Files link': p.files_link });
+  return { Upcoming: P.filter(p => p.date >= today && ['Tentative','Confirmed','Rescheduled'].includes(p.status)).map(row), Completed: P.filter(p => p.status === 'Completed').map(row) };
+}
+
+function Reports({ me, team, toast, bump }) {
+  const [key, setKey] = useState('officers'); const [data, setData] = useState(null); const [busy, setBusy] = useState(false);
+  useEffect(() => { setData(null); buildReport(key, team).then(setData).catch(e => toast(nice(e))); }, [key]);
+  const first = data && Object.values(data)[0]; const cols = first?.[0] ? Object.keys(first[0]) : [];
+  const info = REPORTS.find(r => r[0] === key);
+  // Import
+  const [imp, setImp] = useState(null);
+  const importFile = async e => {
+    const file = e.target.files[0]; if (!file) return; setBusy(true); setImp(null);
+    const wb = XLSX.read(await file.arrayBuffer()); const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    const get = (r, ...k) => { for (const c of Object.keys(r)) if (k.includes(c.trim().toLowerCase())) return String(r[c]).trim(); return ''; };
+    let added = 0; const skipped = [];
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]; const name = get(r, 'school name', 'name', 'school'), district = get(r, 'district'), city = get(r, 'city', 'town');
+      if (!name || !district || !city) { skipped.push({ row: i + 2, name: name || '(blank)', why: 'School name, District and City are required' }); continue; }
+      const off = get(r, 'officer email', 'officer', 'assigned officer').toLowerCase();
+      const { error } = await db.from('schools').insert({ name, district, city, address: get(r, 'address') || null, category: get(r, 'category') || null, board: get(r, 'board') || null,
+        principal: get(r, 'principal') || null, coordinator: get(r, 'coordinator') || null, phone: get(r, 'phone', 'contact number') || null, whatsapp: get(r, 'whatsapp') || null,
+        email: get(r, 'email') || null, students: +get(r, 'students', 'student strength') || null, source: get(r, 'lead source', 'source') || 'Import', remarks: get(r, 'remarks') || null,
+        officer_id: team.find(t => t.email.toLowerCase() === off || t.name.toLowerCase() === off)?.id || null });
+      if (error) skipped.push({ row: i + 2, name, why: nice(error) }); else added++;
+    }
+    setBusy(false); setImp({ added, skipped }); e.target.value = ''; bump(); setKey(key);
+  };
+  const template = () => exportExcel('School import template', { Schools: [{ 'School name': 'Example Higher Secondary School', District: 'Kozhikode', City: 'Kunnamangalam', Address: '', Category: 'Unaided', Board: 'CBSE', Principal: '', Coordinator: '', Phone: '', WhatsApp: '', Email: '', Students: '', 'Officer email': '', 'Lead source': 'Field visit', Remarks: '' }] });
+
+  return html`
+    <div className="head"><div><h1>Reports</h1><p>${me.role === 'officer' ? 'Figures for your own schools.' : 'Figures for all schools and officers.'}</p></div>
+      <button className="btn primary" disabled=${!data} onClick=${() => exportExcel(info[1], data)}>Download Excel</button></div>
+    <div className="chips" style=${{ marginBottom: 14 }}>${REPORTS.map(r => html`<button key=${r[0]} className=${'chip' + (key === r[0] ? ' on' : '')} onClick=${() => setKey(r[0])}>${r[1]}</button>`)}</div>
+    <p className="soft small">${info[2]}</p>
+    <div className="card scroll" style=${{ marginBottom: 24 }}>${!data ? html`<p className="pad muted">Loading…</p>` : !first?.length ? html`<p className="pad muted">No records yet.</p>` : html`
+      <table><thead><tr>${cols.map(c => html`<th key=${c}>${c}</th>`)}</tr></thead><tbody>${first.slice(0, 200).map((r, i) => html`<tr key=${i}>${cols.map(c => html`<td key=${c} className=${typeof r[c] === 'number' ? 'r' : ''} style=${{ whiteSpace: 'nowrap' }}>${r[c] ?? ''}</td>`)}</tr>`)}</tbody></table>
+      ${first.length > 200 && html`<p className="pad small muted">Showing 200 of ${first.length}. Download Excel for all rows.</p>`}`}</div>
+    ${me.role !== 'officer' && html`<div className="card pad"><h2>Import schools from Excel</h2>
+      <p className="soft small">First row = column names: School name, District, City, Address, Category, Board, Principal, Coordinator, Phone, WhatsApp, Email, Students, Officer email, Lead source, Remarks. Duplicates are skipped and listed.</p>
+      <div className="row"><button className="btn" onClick=${template}>Download template</button><label className="btn primary">${busy ? 'Importing…' : 'Choose file'}<input type="file" accept=".xlsx,.xls,.csv" hidden disabled=${busy} onChange=${importFile}/></label></div>
+      ${imp && html`<div className="msg ok" style=${{ marginTop: 12 }}>${imp.added} added · ${imp.skipped.length} skipped</div>
+        ${imp.skipped.length > 0 && html`<div className="scroll" style=${{ marginTop: 8 }}><table><thead><tr><th>Row</th><th>School</th><th>Why skipped</th></tr></thead><tbody>${imp.skipped.map(s => html`<tr key=${s.row}><td>${s.row}</td><td>${s.name}</td><td className="soft">${s.why}</td></tr>`)}</tbody></table></div>`}`}</div>`}`;
+}
+
+/* ====================================================================
+   8. TEAM (admin)
+   ==================================================================== */
+function Team({ team, reloadTeam, toast }) {
+  const save = async (t, patch) => { const { error } = await db.from('team').update(patch).eq('id', t.id); if (error) toast(nice(error)); else { toast('Saved'); reloadTeam(); } };
+  return html`
+    <div className="head"><div><h1>Team</h1><p>${team.filter(t => t.role === 'officer' && t.active).length} active officers</p></div></div>
+    <div className="msg warn" style=${{ marginBottom: 14 }}><b>To add someone:</b> Supabase → Authentication → Users → Add user → Create new user (tick Auto Confirm). They appear here as an officer — set their name and role below.</div>
+    <div className="card scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Active</th></tr></thead><tbody>
+      ${team.map(t => html`<tr key=${t.id}>
+        <td><input className="input" defaultValue=${t.name} onBlur=${e => e.target.value.trim() && e.target.value !== t.name && save(t, { name: e.target.value.trim() })} aria-label="Name"/></td>
+        <td className="small">${t.email}</td>
+        <td><input className="input" defaultValue=${t.phone || ''} onBlur=${e => e.target.value !== (t.phone || '') && save(t, { phone: e.target.value || null })} aria-label="Phone"/></td>
+        <td><${Select} value=${t.role} onChange=${v => save(t, { role: v })} options=${[{ value: 'officer', label: 'Outreach Officer' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }]} aria-label="Role"/></td>
+        <td><input type="checkbox" checked=${t.active} onChange=${e => save(t, { active: e.target.checked })} aria-label="Active"/></td></tr>`)}
+    </tbody></table></div>
+    <p className="soft small">Manager = sees all schools, reassigns, reports. Officer = only their own schools. Untick Active when someone leaves, then reassign their schools from the Schools tab.</p>`;
+}
+
+/* ====================================================================
+   9. APP
+   ==================================================================== */
+function App() {
+  const [session, setSession] = useState(undefined); const [recovery, setRecovery] = useState(false);
+  const [me, setMe] = useState(null); const [team, setTeam] = useState([]);
+  const [tab, setTab] = useState('dashboard'); const [params, setParams] = useState({});
+  const [modal, setModal] = useState(null); const [stack, setStack] = useState([]);
+  const [toastMsg, setToastMsg] = useState(null); const [refreshKey, setRefresh] = useState(0);
+  const toast = m => { setToastMsg(m); setTimeout(() => setToastMsg(null), 2600); };
+  const bump = () => setRefresh(k => k + 1);
+
+  useEffect(() => {
+    db.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = db.auth.onAuthStateChange((ev, s) => { if (ev === 'PASSWORD_RECOVERY') setRecovery(true); setSession(s); });
+    return () => data.subscription.unsubscribe();
+  }, []);
+  const reloadTeam = async () => { const { data } = await db.from('team').select('*').order('name'); setTeam(data || []); return data || []; };
+  useEffect(() => { if (!session) { setMe(null); return; }
+    reloadTeam().then(t => setMe(t.find(x => x.id === session.user.id) || { missing: true })); }, [session?.user?.id]);
+
+  const go = (t, p = {}) => { setParams(p); setTab(t); setModal(null); setStack([]); scrollTo(0, 0); };
+  const open = m => { setStack(s => modal ? [...s, modal] : s); setModal(m); };
+  const close = () => { setModal(stack.at(-1) || null); setStack(s => s.slice(0, -1)); };
+  const openSchool = id => open({ k: 'school', id });
+  const openProgramme = id => open({ k: 'prog', id });
+  const editSchool = s => open({ k: 'schoolForm', s });
+  const newProgramme = school => open({ k: 'progForm', school });
+  const editProgramme = p => open({ k: 'progForm', p });
+
+  if (session === undefined) return html`<p className="wrap muted">Loading…</p>`;
+  if (!session || recovery) return html`<${Login} recovery=${recovery} onDone=${() => { setRecovery(false); toast('Password updated'); }}/>`;
+  if (!me) return html`<p className="wrap muted">Loading…</p>`;
+  if (me.missing || !me.active) return html`<div className="login"><div className="card pad"><h2>No access</h2><p className="soft">Your account isn’t active in the CRM. Ask the admin to activate you.</p><button className="btn" onClick=${() => db.auth.signOut()}>Sign out</button></div></div>`;
+
+  const tabs = [['dashboard', 'Dashboard', I.home], ['schools', 'Schools', I.school], ['programmes', 'Programmes', I.cal], ['reports', 'Reports', I.chart], ...(me.role === 'admin' ? [['team', 'Team', I.team]] : [])];
+  const P = { me, team, toast, bump, refreshKey, openSchool, openProgramme, editSchool, newProgramme };
+  return html`
+    <header className="top"><div className="in"><${Logo}/>
+      <nav className="tabs">${tabs.map(([k, l]) => html`<button key=${k} className=${'tab' + (tab === k ? ' on' : '')} onClick=${() => go(k)}>${l}</button>`)}</nav>
+      <div className="who"><b>${me.name}</b><button className="small" style=${{ border: 0, background: 'none', color: 'var(--muted)', padding: 0, cursor: 'pointer' }} onClick=${() => db.auth.signOut()}>Sign out</button></div></div></header>
+    <main className="wrap" key=${tab + JSON.stringify(params)}>
+      ${tab === 'dashboard' && html`<${Dashboard} ...${P} go=${go} key=${refreshKey}/>`}
+      ${tab === 'schools' && html`<${Schools} ...${P} params=${params}/>`}
+      ${tab === 'programmes' && html`<${Programmes} ...${P} params=${params}/>`}
+      ${tab === 'reports' && html`<${Reports} ...${P}/>`}
+      ${tab === 'team' && html`<${Team} team=${team} reloadTeam=${reloadTeam} toast=${toast}/>`}
+    </main>
+    <nav className="bottom">${tabs.map(([k, l, ic]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => go(k)}>${ic}${l}</button>`)}</nav>
+    ${modal?.k === 'school' && html`<${SchoolDetail} key=${modal.id} ...${P} id=${modal.id} onClose=${close} scheduleFor=${s => newProgramme(s)}/>`}
+    ${modal?.k === 'schoolForm' && html`<${SchoolForm} ...${P} school=${modal.s} onClose=${close} onSaved=${id => { toast('School saved'); bump(); setStack([]); setModal({ k: 'school', id }); }}/>`}
+    ${modal?.k === 'prog' && html`<${ProgrammeDetail} key=${modal.id} ...${P} id=${modal.id} onClose=${close} editProgramme=${editProgramme}/>`}
+    ${modal?.k === 'progForm' && html`<${ProgrammeForm} ...${P} school=${modal.school} programme=${modal.p} onClose=${close} onSaved=${id => { toast('Programme saved'); bump(); setStack([]); setModal({ k: 'prog', id }); }}/>`}
+    ${toastMsg && html`<div className="toast" role="status">${toastMsg}</div>`}`;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+</script>
+</body>
+</html>

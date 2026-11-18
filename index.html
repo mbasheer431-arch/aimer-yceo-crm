@@ -162,6 +162,63 @@ const db = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_KEY);
 
 const STATUSES = ['New','Contacted','Interested','Confirmed','Programme scheduled','Programme completed','Not interested'];
 const TYPES = ['Call','School visit','Principal meeting','Coordinator meeting','WhatsApp','Email','Follow-up'];
+// Team-managed lists (activity types, school stages) — loaded from Supabase; these arrays are updated in place
+const LISTS = { rows: [] };
+async function loadLists() {
+  const { data, error } = await db.from('lists').select('id,kind,label,sort,active,is_system').order('sort');
+  if (error || !data?.length) return false;            // before update-shared-schools.sql: keep built-in lists
+  LISTS.rows = data;
+  const act = k => data.filter(r => r.kind === k && r.active).map(r => r.label);
+  TYPES.splice(0, TYPES.length, ...act('activity_type')); STATUSES.splice(0, STATUSES.length, ...act('school_stage'));
+  return true;
+}
+async function addListItem(kind, label) {
+  const l = (label || '').trim().replace(/\s+/g, ' ');
+  if (l.length < 2) throw new Error('Type a name (at least 2 letters).');
+  const exists = LISTS.rows.find(r => r.kind === kind && r.label.toLowerCase() === l.toLowerCase());
+  if (exists && exists.active) return exists.label;
+  if (exists) throw new Error(`"${exists.label}" exists but is hidden — ask the coordinator to show it again.`);
+  const { error } = await db.from('lists').insert({ kind, label: l });
+  if (error) throw new Error(error.message.includes('lists_unique_label') ? 'That name already exists.' : /relation|does not exist/.test(error.message) ? 'Run update-shared-schools.sql in Supabase first.' : nice(error));
+  await loadLists(); return l;
+}
+// Small "+ Add" control used next to activity chips and stage pickers
+function AddItem({ kind, onAdded, toast, label }) {
+  const [open, setOpen] = useState(false); const [v, setV] = useState(''); const [busy, setBusy] = useState(false);
+  const save = async () => { setBusy(true); try { const l = await addListItem(kind, v); toast(`“${l}” added for the whole team`); setV(''); setOpen(false); onAdded(l); } catch (e) { toast(e.message); } setBusy(false); };
+  if (!open) return html`<button type="button" className="chip" style=${{ borderStyle: 'dashed', color: 'var(--brand)' }} onClick=${() => setOpen(true)}>${label || '+ Add'}</button>`;
+  return html`<div className="row" style=${{ flexWrap: 'nowrap', gridColumn: '1 / -1' }}>
+    <input className="input" autoFocus value=${v} maxLength="40" placeholder=${kind === 'activity_type' ? 'e.g. Demo session' : 'e.g. Proposal sent'} onInput=${e => setV(e.target.value)}
+      onKeyDown=${e => { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') setOpen(false); }}/>
+    <button type="button" className="btn sm primary" disabled=${busy} onClick=${save}>Add</button><button type="button" className="btn sm" onClick=${() => setOpen(false)}>Cancel</button></div>`;
+}
+// Coordinator / admin: rename, hide, reorder activity types and stages
+function ListsManager({ onClose, toast, onChanged }) {
+  const [rows, setRows] = useState(LISTS.rows); const [edit, setEdit] = useState({});
+  const refresh = async () => { await loadLists(); setRows([...LISTS.rows]); onChanged(); };
+  const move = async (kind, i, dir) => {
+    const list = rows.filter(r => r.kind === kind && r.active), a = list[i], b = list[i + dir]; if (!a || !b) return;
+    const r1 = await db.from('lists').update({ sort: b.sort }).eq('id', a.id); const r2 = await db.from('lists').update({ sort: a.sort }).eq('id', b.id);
+    if (r1.error || r2.error) toast(nice(r1.error || r2.error)); await refresh();
+  };
+  const toggle = async (r, active) => { const { error } = await db.from('lists').update({ active }).eq('id', r.id); if (error) toast(nice(error)); else toast(active ? 'Shown again' : `“${r.label}” hidden — existing records keep it`); await refresh(); };
+  const rename = async r => { const v = (edit[r.id] || '').trim(); if (!v || v === r.label) return setEdit({ ...edit, [r.id]: undefined });
+    const { error } = await db.rpc('rename_list_item', { p_id: r.id, p_label: v }); if (error) toast(nice(error)); else toast('Renamed everywhere'); setEdit({ ...edit, [r.id]: undefined }); await refresh(); };
+  const section = (kind, title, hint) => { const list = rows.filter(r => r.kind === kind && r.active), hidden = rows.filter(r => r.kind === kind && !r.active);
+    return html`<div style=${{ marginBottom: 22 }}><h3>${title}</h3><p className="small soft" style=${{ margin: '2px 0 8px' }}>${hint}</p>
+      <div className="card list">${list.map((r, i) => html`<div key=${r.id} className="item" style=${{ padding: '8px 12px' }}>
+        <div className="row" style=${{ gap: 2, flexWrap: 'nowrap' }}><button className="btn sm" aria-label="Move up" disabled=${i === 0} onClick=${() => move(kind, i, -1)}>↑</button><button className="btn sm" aria-label="Move down" disabled=${i === list.length - 1} onClick=${() => move(kind, i, 1)}>↓</button></div>
+        <div className="grow">${edit[r.id] !== undefined ? html`<input className="input" value=${edit[r.id]} maxLength="40" autoFocus onInput=${e => setEdit({ ...edit, [r.id]: e.target.value })} onKeyDown=${e => e.key === 'Enter' && rename(r)}/>` : html`<b>${r.label}</b>${r.is_system ? html` <span className="badge">Built-in</span>` : ''}`}</div>
+        ${!r.is_system && (edit[r.id] !== undefined ? html`<button className="btn sm primary" onClick=${() => rename(r)}>Save</button>` : html`<button className="btn sm" onClick=${() => setEdit({ ...edit, [r.id]: r.label })}>Rename</button><button className="btn sm" onClick=${() => toggle(r, false)}>Hide</button>`)}
+      </div>`)}</div>
+      <div className="chips" style=${{ marginTop: 8, gridTemplateColumns: '1fr' }}><${AddItem} kind=${kind} toast=${toast} onAdded=${refresh} label=${kind === 'activity_type' ? '+ Add activity type' : '+ Add stage'}/></div>
+      ${hidden.length > 0 && html`<p className="small muted" style=${{ margin: '10px 0 4px' }}>Hidden</p><div className="row">${hidden.map(r => html`<button key=${r.id} className="btn sm" onClick=${() => toggle(r, true)}>Show “${r.label}”</button>`)}</div>`}</div>`; };
+  return html`<${Modal} title="Activity types & school stages" sub="Officers can add new ones while logging outreach. Here you can rename, hide and reorder them." onClose=${onClose}>
+    ${!rows.length ? html`<div className="msg warn">Run update-shared-schools.sql in Supabase to turn on custom lists.</div>` : ''}
+    ${section('activity_type', 'Activity types', 'Shown as buttons when logging outreach.')}
+    ${section('school_stage', 'School stages', 'In order from first contact to programme. New stages are placed before Confirmed — move them where they fit. Built-in stages drive automation, so they can be moved but not renamed or hidden.')}
+  <//>`;
+}
 const OUTCOMES = ['Connected','No response','Interested','Call back later','Confirmed','Not interested'];
 const P_STATUSES = ['Tentative','Confirmed','Rescheduled','Cancelled','Completed'];
 const P_TYPES = ['At AIMER Campus','At school'];
@@ -212,14 +269,14 @@ function NextAction({ actions, value, onChange, required }) {   // value: { acti
   </div>`;
 }
 // Editable "Next:" banner for school and lead pages
-function NextBanner({ row, actions, closed, onSave }) {
+function NextBanner({ row, actions, closed, onSave, readOnly }) {
   const [edit, setEdit] = useState(false); const [v, setV] = useState({ action: row.next_action || '', date: row.next_follow_up || '', time: row.next_action_time || '' });
   useEffect(() => setV({ action: row.next_action || '', date: row.next_follow_up || '', time: row.next_action_time || '' }), [row.next_action, row.next_follow_up, row.next_action_time]);
   if (closed) return null;
   const fs = followState(row.next_follow_up);
   return html`<div className=${'msg ' + (!row.next_follow_up ? 'warn' : fs === 'overdue' ? 'bad' : fs === 'today' ? 'warn' : 'ok')} style=${{ marginBottom: 16, color: 'var(--ink)' }}>
     ${!edit ? html`<div className="row" style=${{ justifyContent: 'space-between' }}><span>Next: <b>${row.next_action || 'No action planned'}</b>${row.next_follow_up ? html` · <b className=${fs === 'overdue' ? 'bad' : ''}>${whenText(row.next_follow_up, row.next_action_time)}</b>` : ''}</span>
-        <button className="btn sm" onClick=${() => setEdit(true)}>${row.next_follow_up ? 'Change' : 'Plan next action'}</button></div>`
+        ${!readOnly && html`<button className="btn sm" onClick=${() => setEdit(true)}>${row.next_follow_up ? 'Change' : 'Plan next action'}</button>`}</div>`
     : html`<${NextAction} actions=${actions} value=${v} onChange=${setV}/>
       <div className="row" style=${{ marginTop: 10 }}><button className="btn sm primary" onClick=${async () => { if (!v.action || !v.date) return; await onSave(v); setEdit(false); }}>Save next action</button><button className="btn sm" onClick=${() => setEdit(false)}>Cancel</button></div>`}
   </div>`;
@@ -325,7 +382,7 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
     const today = todayStr();
     const [schools, progs, acts] = await Promise.all([
       fetchAll(() => db.from('schools').select('id,name,city,district,status,officer_id,next_follow_up,next_action,next_action_time,phone,whatsapp,coordinator,principal,students')),
-      fetchAll(() => db.from('programmes').select('id,code,date,start_time,end_time,type,status,expected,actual,officer_id,venue,schools(name)')),
+      fetchAll(() => db.from('programmes').select('id,code,date,start_time,end_time,type,status,expected,actual,officer_id,school_id,venue,schools(name)')),
       isMgr ? fetchAll(() => db.from('outreach').select('officer_id,type')) : Promise.resolve([]),
     ]);
     setD({ schools, progs, acts, today });
@@ -333,7 +390,10 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
   useEffect(() => { load().catch(e => toast(nice(e))); }, []);
   if (!d) return html`<p className="muted">Loading…</p>`;
 
-  const { schools, progs, acts, today } = d;
+  const today = d.today, acts = d.acts;
+  const schools = isMgr ? d.schools : d.schools.filter(s => s.officer_id === me.id);
+  const mineIds = new Set(schools.map(s => s.id));
+  const progs = isMgr ? d.progs : d.progs.filter(p => p.officer_id === me.id || mineIds.has(p.school_id));
   const count = f => schools.filter(f).length;
   const confirmed = s => ['Confirmed','Programme scheduled','Programme completed'].includes(s.status);
   const open = s => !CLOSED.includes(s.status);
@@ -405,12 +465,13 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
 /* ====================================================================
    5. SCHOOLS
    ==================================================================== */
-function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump }) {
+function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump, toast }) {
   const isMgr = me.role !== 'officer';
   const [bulk, setBulk] = useState(false);
   const [q, setQ] = useState(''); const [status, setStatus] = useState(params.status || '');
-  const [district, setDistrict] = useState(''); const [officer, setOfficer] = useState(''); const [follow, setFollow] = useState(params.follow || '');
+  const [district, setDistrict] = useState(''); const [officer, setOfficer] = useState(isMgr || params.status || params.follow ? '' : me.id); const [follow, setFollow] = useState(params.follow || '');
   const [page, setPage] = useState(0); const [rows, setRows] = useState(null); const [total, setTotal] = useState(0);
+  const [sel, setSel] = useState([]); const [lists, setLists] = useState(false);
   useEffect(() => { if (params.add) editSchool(null); }, []);
   useEffect(() => {
     let alive = true;
@@ -423,42 +484,49 @@ function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump })
       if (follow === 'today') x = x.eq('next_follow_up', todayStr());
       if (follow === 'overdue') x = x.lt('next_follow_up', todayStr()).not('status', 'in', '("Programme completed","Not interested")');
       const { data, count } = await x.order('created_at', { ascending: false }).range(page * PAGE, page * PAGE + PAGE - 1);
-      if (alive) { setRows(data || []); setTotal(count || 0); }
+      if (alive) { setRows(data || []); setTotal(count || 0); setSel([]); }
     }, 250);
     return () => { alive = false; clearTimeout(t); };
   }, [q, status, district, officer, follow, page, refreshKey]);
+  const assign = async to => { if (!sel.length) return;
+    const { error } = await db.from('schools').update({ officer_id: to || null }).in('id', sel);
+    if (error) toast(nice(error)); else { toast(`${sel.length} school${sel.length === 1 ? '' : 's'} assigned to ${team.find(t => t.id === to)?.name || 'nobody'}`); bump(); } };
   useEffect(() => setPage(0), [q, status, district, officer, follow]);
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
   return html`
-    <div className="head"><div><h1>Schools</h1><p>${total} school${total === 1 ? '' : 's'}${isMgr ? '' : ' assigned to you'}</p></div>
-      <div className="row">${isMgr && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}<button className="btn primary" onClick=${() => editSchool(null)}>+ Add school</button></div></div>
+    <div className="head"><div><h1>Schools</h1><p>${total} school${total === 1 ? '' : 's'}${officer === me.id ? ' assigned to you' : officer === 'none' ? ' unassigned' : officer ? ' · ' + nameOf(officer) : ' in the shared list'}</p></div>
+      <div className="row">${isMgr && html`<button className="btn" onClick=${() => setLists(true)}>Stages & types</button>`}${isMgr && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}<button className="btn primary" onClick=${() => editSchool(null)}>+ Add school</button></div></div>
     ${bulk && html`<${BulkUpload} team=${team} onClose=${() => setBulk(false)} onDone=${bump}/>`}
+    ${lists && html`<${ListsManager} toast=${toast} onClose=${() => setLists(false)} onChanged=${bump}/>`}
     <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', marginBottom: 14 }}>
       <input className="input" placeholder="Search name, ID, city, phone…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
-      <${Select} value=${status} onChange=${setStatus} options=${STATUSES} blank="All statuses" aria-label="Status"/>
+      <${Select} value=${status} onChange=${setStatus} options=${STATUSES} blank="All stages" aria-label="Stage"/>
       <${Select} value=${district} onChange=${setDistrict} options=${C.DISTRICTS} blank="All districts" aria-label="District"/>
-      ${isMgr && html`<${Select} value=${officer} onChange=${setOfficer} options=${[{ value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))]} blank="All officers" aria-label="Officer"/>`}
+      <${Select} value=${officer} onChange=${setOfficer} options=${[...(isMgr ? [] : [{ value: me.id, label: 'My schools' }]), { value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active && t.role !== 'telecaller' && (isMgr || t.id !== me.id)).map(t => ({ value: t.id, label: t.name }))]} blank=${isMgr ? 'All officers' : 'All schools (shared list)'} aria-label="Officer"/>
       <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'today', label: 'Next action today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any next action" aria-label="Next action"/>
     </div>
     ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No schools match. Clear a filter or add a school.</div>` : html`
       <div className="card list hide-lg">${rows.map(s => html`<div key=${s.id} className="item click" onClick=${() => openSchool(s.id)}>
         <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${s.name}</b>${badge(s.status)}</div>
         <div className="small muted">${s.code} · ${s.city}, ${s.district}</div>
-        <div className="small">Next: ${s.next_action ? html`<b>${s.next_action}</b> · ` : ''}<b className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(s.next_follow_up, s.next_action_time)}</b>${isMgr ? html`<span className="muted"> · ${nameOf(s.officer_id)}</span>` : ''}</div></div></div>`)}</div>
-      <div className="card scroll hide-sm"><table><thead><tr><th>School</th><th>District</th><th>Contact</th><th>Status</th>${isMgr && html`<th>Officer</th>`}<th>Last contact</th><th>Next action</th></tr></thead>
+        <div className="small">Next: ${s.next_action ? html`<b>${s.next_action}</b> · ` : ''}<b className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(s.next_follow_up, s.next_action_time)}</b><span className=${s.officer_id === me.id ? 'ok' : 'muted'}> · ${s.officer_id === me.id ? 'You' : nameOf(s.officer_id)}</span></div></div></div>`)}</div>
+      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${rows.length > 0 && sel.length === rows.length} onChange=${e => setSel(e.target.checked ? rows.map(r => r.id) : [])}/></th>`}<th>School</th><th>District</th><th>Contact</th><th>Stage</th><th>Officer</th><th>Last contact</th><th>Next action</th></tr></thead>
         <tbody>${rows.map(s => html`<tr key=${s.id} className="click" onClick=${() => openSchool(s.id)}>
+          ${isMgr && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + s.name} checked=${sel.includes(s.id)} onChange=${e => setSel(e.target.checked ? [...sel, s.id] : sel.filter(x => x !== s.id))}/></td>`}
           <td><b>${s.name}</b><div className="small muted">${s.code}${s.board ? ' · ' + s.board : ''}</div></td>
           <td>${s.district}<div className="small muted">${s.city}</div></td>
           <td>${s.coordinator || s.principal || '—'}<div className="small muted">${s.phone || ''}</div></td>
-          <td>${badge(s.status)}</td>${isMgr && html`<td>${nameOf(s.officer_id)}</td>`}
+          <td>${badge(s.status)}</td><td className=${s.officer_id === me.id ? 'ok' : s.officer_id ? '' : 'muted'}>${s.officer_id === me.id ? 'You' : nameOf(s.officer_id)}</td>
           <td>${fDate(s.last_contact)}</td><td>${s.next_action ? html`<div className="small">${s.next_action}</div>` : ''}<b className=${'small ' + (followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : '')}>${whenText(s.next_follow_up, s.next_action_time)}</b></td></tr>`)}</tbody></table></div>
+      ${isMgr && sel.length > 0 && html`<div className="row hide-sm" style=${{ marginTop: 10 }}><span className="small"><b>${sel.length} selected</b> — assign to</span>
+        <${Select} value="" onChange=${v => assign(v === 'none' ? null : v)} options=${[{ value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active && !['telecaller'].includes(t.role)).map(t => ({ value: t.id, label: t.name }))]} blank="Choose officer…" style=${{ width: 230 }}/></div>`}
       <div className="row" style=${{ justifyContent: 'space-between', marginTop: 12 }}><span className="small muted">Page ${page + 1} of ${pages}</span>
         <div className="row"><button className="btn sm" disabled=${page === 0} onClick=${() => setPage(page - 1)}>Previous</button><button className="btn sm" disabled=${page + 1 >= pages} onClick=${() => setPage(page + 1)}>Next</button></div></div>`}`;
 }
 
-function SchoolForm({ me, team, school, onClose, onSaved }) {
+function SchoolForm({ me, team, school, onClose, onSaved, toast }) {
   const isMgr = me.role !== 'officer';
   const [f, set] = useForm(school || { status: 'New', officer_id: isMgr ? '' : me.id });
   const [dups, setDups] = useState([]); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [sure, setSure] = useState(false);
@@ -495,7 +563,8 @@ function SchoolForm({ me, team, school, onClose, onSaved }) {
       <${Field} label="Student strength"><input className="input" type="number" min="0" value=${f.students ?? ''} onInput=${set('students')}/><//>
       <${Field} label="Assigned officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))} blank="Unassigned"/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
       <${Field} label="Lead source"><${Select} value=${f.source} onChange=${set('source')} options=${C.SOURCES} blank="—"/><//>
-      <${Field} label="Status"><${Select} value=${f.status} onChange=${set('status')} options=${STATUSES}/><//>
+      <${Field} label="Stage"><${Select} value=${f.status} onChange=${set('status')} options=${STATUSES}/>
+        <div className="chips" style=${{ gridTemplateColumns: '1fr', marginTop: 6 }}><${AddItem} kind="school_stage" toast=${toast} label="+ New stage" onAdded=${l => set('status')(l)}/></div><//>
       <${Field} label="Next action"><${Select} value=${f.next_action} onChange=${set('next_action')} options=${SCHOOL_ACTIONS} blank=${school ? '—' : 'First call (default)'}/><//>
       <div className="row" style=${{ flexWrap: 'nowrap', gap: 6, alignItems: 'flex-end' }}><${Field} label="Next action date"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
         <${Field} label="Time"><input className="input" type="time" value=${(f.next_action_time || '').slice(0, 5)} onInput=${set('next_action_time')} style=${{ width: 116 }}/><//></div>
@@ -507,7 +576,8 @@ function SchoolForm({ me, team, school, onClose, onSaved }) {
     </form><//>`;
 }
 
-function OutreachForm({ me, team, schoolId, status, onSaved }) {
+function OutreachForm({ me, team, schoolId, status, onSaved, toast }) {
+  const [, force] = useState(0); const [stage, setStage] = useState('');
   const [f, set, setF] = useForm({ type: 'Call', done_on: todayStr(), outcome: 'Connected', remarks: '', officer_id: me.id });
   const first = suggestSchool('Connected', 'Call', status);
   const [nx, setNx] = useState({ action: first[0], date: first[1], time: first[2] });
@@ -523,10 +593,12 @@ function OutreachForm({ me, team, schoolId, status, onSaved }) {
       next_follow_up: closing ? null : nx.date, next_action: closing ? null : nx.action, next_action_time: closing || !nx.time ? null : nx.time,
       officer_id: me.role === 'officer' ? me.id : f.officer_id });
     setBusy(false);
-    if (error) setErr(nice(error)); else { setF(p => ({ ...p, remarks: '' })); onSaved(); }
+    if (!error && stage) { const r = await db.from('schools').update({ status: stage }).eq('id', schoolId); if (r.error) { setErr(nice(r.error)); return; } }
+    if (error) setErr(nice(error)); else { setF(p => ({ ...p, remarks: '' })); setStage(''); onSaved(); }
   };
   return html`<form className="form" onSubmit=${save}>
-    <div className="chips" role="radiogroup" aria-label="Activity">${TYPES.map(t => html`<button type="button" key=${t} role="radio" aria-checked=${f.type === t} className=${'chip' + (f.type === t ? ' on' : '')} onClick=${() => { set('type')(t); suggest(f.outcome, t); }}>${t}</button>`)}</div>
+    <div className="chips" role="radiogroup" aria-label="Activity">${TYPES.map(t => html`<button type="button" key=${t} role="radio" aria-checked=${f.type === t} className=${'chip' + (f.type === t ? ' on' : '')} onClick=${() => { set('type')(t); suggest(f.outcome, t); }}>${t}</button>`)}
+      <${AddItem} kind="activity_type" toast=${toast} label="+ Add type" onAdded=${l => { set('type')(l); force(x => x + 1); }}/></div>
     <div className="form two">
       <${Field} label="Date"><input className="input" type="date" max=${todayStr()} required value=${f.done_on} onInput=${set('done_on')}/><//>
       <${Field} label="Outcome"><${Select} value=${f.outcome} onChange=${v => { set('outcome')(v); suggest(v, f.type); }} options=${OUTCOMES}/><//>
@@ -535,6 +607,10 @@ function OutreachForm({ me, team, schoolId, status, onSaved }) {
     </div>
     ${closing ? html`<p className="small muted">No next action needed — the school will be marked Not interested.</p>`
       : html`<div className="card pad" style=${{ background: 'var(--paper)' }}><p className="small" style=${{ margin: '0 0 8px' }}><b>Suggested next step</b> — change it if you agreed something else.</p><${NextAction} actions=${SCHOOL_ACTIONS} value=${nx} onChange=${setNx} required/></div>`}
+    <div className="form two" style=${{ alignItems: 'end' }}>
+      <${Field} label="Move school to stage (optional)"><${Select} value=${stage} onChange=${setStage} options=${STATUSES.filter(x => x !== status)} blank=${'Keep: ' + status + ' (or set automatically)'}/><//>
+      <div className="chips" style=${{ gridTemplateColumns: '1fr' }}><${AddItem} kind="school_stage" toast=${toast} label="+ New stage" onAdded=${l => { setStage(l); force(x => x + 1); }}/></div>
+    </div>
     ${err && html`<div className="msg bad">${err}</div>`}
     <div><button className="btn primary" disabled=${busy}>${busy ? 'Saving…' : 'Save outreach'}</button></div></form>`;
 }
@@ -556,6 +632,7 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
     const { error } = await db.from('schools').delete().eq('id', id); if (error) toast(nice(error)); else { toast('School deleted'); bump(); onClose(); } };
   if (!s) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
   const nameOf = x => team.find(t => t.id === x)?.name || 'Unassigned';
+  const canWork = me.role !== 'officer' || s.officer_id === me.id;
   const info = [['School ID', s.code], ['City', s.city + ', ' + s.district], ['Address', s.address], ['Category / board', [s.category, s.board].filter(Boolean).join(' · ')],
     ['Principal', s.principal], ['Coordinator', s.coordinator], ['Phone', s.phone], ['WhatsApp', s.whatsapp], ['Email', s.email], ['Students', s.students],
     ['Officer', nameOf(s.officer_id)], ['Lead source', s.source], ['Last contact', fDate(s.last_contact)], ['Remarks', s.remarks]];
@@ -563,11 +640,12 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
     <div className="row" style=${{ marginBottom: 14 }}>
       ${s.phone && html`<a className="btn" href=${tel(s.phone)}>${I.phone} Call</a>`}
       ${(s.whatsapp || s.phone) && html`<a className="btn" href=${wa(s.whatsapp || s.phone)} target="_blank">${I.wa} WhatsApp</a>`}
-      <button className="btn" onClick=${() => editSchool(s)}>Edit</button>
-      <button className="btn gold" onClick=${() => scheduleFor(s)}>Schedule programme</button></div>
-    <${NextBanner} row=${s} actions=${SCHOOL_ACTIONS} closed=${CLOSED.includes(s.status)} onSave=${async v => { const { error } = await db.from('schools').update({ next_action: v.action, next_follow_up: v.date, next_action_time: v.time || null }).eq('id', s.id); if (error) toast(nice(error)); else { toast('Next action saved'); load(); bump(); } }}/>
-    <h3 style=${{ marginBottom: 10 }}>Log outreach</h3>
-    <${OutreachForm} key=${s.status} me=${me} team=${team} schoolId=${s.id} status=${s.status} onSaved=${() => { toast('Outreach saved'); load(); bump(); }}/>
+      ${canWork && html`<button className="btn" onClick=${() => editSchool(s)}>Edit</button>`}
+      ${canWork && html`<button className="btn gold" onClick=${() => scheduleFor(s)}>Schedule programme</button>`}</div>
+    ${!canWork && html`<div className="msg warn" style=${{ marginBottom: 16, color: 'var(--ink)' }}>This school belongs to <b>${s.officer_id ? nameOf(s.officer_id) : 'nobody yet (unassigned)'}</b>. You can see its details and history; only ${s.officer_id ? 'they' : 'the officer it’s assigned to'} or the coordinator can update it. Ask the coordinator if it should be yours.</div>`}
+    <${NextBanner} row=${s} actions=${SCHOOL_ACTIONS} closed=${CLOSED.includes(s.status)} readOnly=${!canWork} onSave=${async v => { const { error } = await db.from('schools').update({ next_action: v.action, next_follow_up: v.date, next_action_time: v.time || null }).eq('id', s.id); if (error) toast(nice(error)); else { toast('Next action saved'); load(); bump(); } }}/>
+    ${canWork && html`<h3 style=${{ marginBottom: 10 }}>Log outreach</h3>
+    <${OutreachForm} key=${s.status} me=${me} team=${team} schoolId=${s.id} status=${s.status} toast=${toast} onSaved=${() => { toast('Outreach saved'); load(); bump(); }}/>`}
     <h3 style=${{ margin: '22px 0 10px' }}>Programmes</h3>
     ${progs.length ? html`<div className="card list">${progs.map(p => html`<div key=${p.id} className="item click" onClick=${() => openProgramme(p.id)}><div className="grow"><b>${fDate(p.date)}, ${fTime(p.start_time)}</b><div className="small muted">${p.code} · ${p.type} · ${p.actual ?? p.expected} students</div></div>${badge(p.status)}</div>`)}</div>`
       : html`<p className="muted small">No programme yet.</p>`}
@@ -750,12 +828,13 @@ const REPORTS = [
   ['followups', 'Next actions due', 'Schools whose next action is due today or overdue, oldest first'],
   ['outreach', 'Outreach log', 'Every call, visit, meeting and message'],
 ];
-async function buildReport(key, team) {
+async function buildReport(key, team, me) {
+  const mineOnly = me && me.role === 'officer';
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
   const today = todayStr();
   const confirmed = s => ['Confirmed','Programme scheduled','Programme completed'].includes(s.status);
   if (key === 'schools' || key === 'district' || key === 'followups' || key === 'officers') {
-    const S = await fetchAll(() => db.from('schools').select('*').order('district').order('name'));
+    const S = (await fetchAll(() => db.from('schools').select('*').order('district').order('name'))).filter(s => !mineOnly || s.officer_id === me.id);
     if (key === 'schools') return { Schools: S.map(s => ({ 'School ID': s.code, 'School name': s.name, District: s.district, City: s.city, Address: s.address, Category: s.category, Board: s.board,
       Principal: s.principal, Coordinator: s.coordinator, Phone: s.phone, WhatsApp: s.whatsapp, Email: s.email, Students: s.students, Officer: nameOf(s.officer_id),
       'Lead source': s.source, Status: s.status, 'Last contact': s.last_contact, 'Next action': s.next_action, 'Next action date': s.next_follow_up, 'Time': s.next_action_time?.slice(0, 5), Remarks: s.remarks })) };
@@ -773,9 +852,9 @@ async function buildReport(key, team) {
         Confirmed: mine.filter(confirmed).length, 'Programmes completed': p.length, 'Students reached': p.reduce((s, x) => s + (x.actual || 0), 0),
         'Pending follow-ups': mine.filter(s => !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up <= today).length }; }) };
   }
-  if (key === 'outreach') { const A = await fetchAll(() => db.from('outreach').select('*, schools(code,name,district)').order('done_on', { ascending: false }));
+  if (key === 'outreach') { const A = (await fetchAll(() => db.from('outreach').select('*, schools(code,name,district)').order('done_on', { ascending: false }))).filter(a => !mineOnly || a.officer_id === me.id);
     return { Outreach: A.map(a => ({ Date: a.done_on, 'School ID': a.schools?.code, School: a.schools?.name, District: a.schools?.district, Activity: a.type, Outcome: a.outcome, Officer: nameOf(a.officer_id), Remarks: a.remarks, 'Next action': a.next_action, 'Next action date': a.next_follow_up })) }; }
-  const P = await fetchAll(() => db.from('programmes').select('*, schools(code,name,district)').order('date'));
+  const P = (await fetchAll(() => db.from('programmes').select('*, schools(code,name,district)').order('date'))).filter(p => !mineOnly || p.officer_id === me.id);
   if (key === 'inout') return { 'Inbound vs outbound': P_TYPES.map(t => { const l = P.filter(p => p.type === t), r = { Type: t === 'At AIMER Campus' ? 'Inbound — at AIMER Campus' : 'Outbound — at school', Total: l.length };
     P_STATUSES.forEach(s => r[s] = l.filter(p => p.status === s).length); r['Expected students'] = l.reduce((a, p) => a + p.expected, 0); r['Students attended'] = l.reduce((a, p) => a + (p.actual || 0), 0); return r; }) };
   const row = p => ({ 'Programme ID': p.code, 'School ID': p.schools?.code, School: p.schools?.name, District: p.schools?.district, Type: p.type, Date: p.date, Start: p.start_time?.slice(0, 5), End: p.end_time?.slice(0, 5),
@@ -785,7 +864,7 @@ async function buildReport(key, team) {
 
 function Reports({ me, team, toast }) {
   const [key, setKey] = useState('officers'); const [data, setData] = useState(null);
-  useEffect(() => { setData(null); buildReport(key, team).then(setData).catch(e => toast(nice(e))); }, [key]);
+  useEffect(() => { setData(null); buildReport(key, team, me).then(setData).catch(e => toast(nice(e))); }, [key]);
   const first = data && Object.values(data)[0]; const cols = first?.[0] ? Object.keys(first[0]) : [];
   const info = REPORTS.find(r => r[0] === key);
   return html`
@@ -1651,6 +1730,8 @@ function App() {
     return () => data.subscription.unsubscribe();
   }, []);
   const reloadTeam = async () => { const { data } = await db.from('team').select('*').order('name'); setTeam(data || []); return data || []; };
+  const [, setListsVer] = useState(0);
+  useEffect(() => { if (session) loadLists().then(ok => ok && setListsVer(v => v + 1)); }, [session?.user?.id, refreshKey]);
   useEffect(() => { if (!session) { setMe(null); return; }
     reloadTeam().then(t => setMe(t.find(x => x.id === session.user.id) || { missing: true })); }, [session?.user?.id]);
 

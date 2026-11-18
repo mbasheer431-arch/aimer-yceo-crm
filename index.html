@@ -16,6 +16,10 @@
 window.CRM_CONFIG = {
   SUPABASE_URL: 'https://fclldydvlmleubklifto.supabase.co',
   SUPABASE_KEY: 'sb_publishable_uPbpTjBten60weQr9fmxsg_KRSwsjf1',      // public key, safe in the browser
+  // Young CEO leads
+  REG_FEE: 299,                                   // registration fee (₹)
+  PAYMENT_LINK: '',                               // paste your Razorpay / UPI payment link, e.g. https://rzp.io/l/aimer-yceo
+  IDEA_FORM_LINK: '',                             // paste the idea submission form link
   CAMPUS_VENUE: 'AIMER Campus',
   CAMPUS_ADDRESS: 'AIMER Business School, Markaz Knowledge City, Kozhikode, Kerala',
   DISTRICTS: ['Thiruvananthapuram','Kollam','Pathanamthitta','Alappuzha','Kottayam','Idukki','Ernakulam','Thrissur','Palakkad','Malappuram','Kozhikode','Wayanad','Kannur','Kasaragod','Other – India','UAE','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain'],
@@ -37,7 +41,7 @@ window.CRM_CONFIG = {
   --ink:#E8EEF0; --soft:#AEBBC2; --muted:#83919A; --paper:#0D1417; --card:#152026; --line:#26363E;
   --ok:#4ABE8C; --warn:#E6AA46; --bad:#EC6868; --on-brand:#0D1417; --cta:#E8EEF0; --on-cta:#0D1417; color-scheme:dark;
 }}
-*{box-sizing:border-box} html,body{margin:0;background:var(--paper);color:var(--ink)}
+*{box-sizing:border-box} .grid>*,.stats>*{min-width:0} html,body{margin:0;background:var(--paper);color:var(--ink)}
 body{font:15px/1.5 'Hanken Grotesk',system-ui,sans-serif;font-variant-numeric:tabular-nums;-webkit-tap-highlight-color:transparent}
 h1,h2,h3,.num{font-family:'Bricolage Grotesque','Hanken Grotesk',sans-serif;margin:0;letter-spacing:-.015em}
 h1{font-size:26px} h2{font-size:18px} h3{font-size:16px}
@@ -77,6 +81,15 @@ label.f{display:block} label.f>span{display:block;font-size:13px;font-weight:600
 .b-Confirmed{background:#1680541A;color:var(--ok)} .b-Programme-scheduled,.b-Rescheduled{background:#7C3AED1A;color:#7C3AED}
 .b-Programme-completed,.b-Completed{background:var(--brand-tint);color:var(--brand)} .b-Not-interested,.b-Cancelled{background:#C430301A;color:var(--bad)}
 @media(prefers-color-scheme:dark){.b-Contacted{color:#7DD3FC}.b-Programme-scheduled,.b-Rescheduled{color:#C4B5FD}}
+.b-Payment-pending{background:#FBF0DC;color:var(--warn)} .b-Paid,.b-Idea-submitted{background:#1680541A;color:var(--ok)}
+.b-Shortlisted{background:#7C3AED1A;color:#7C3AED} .b-Wrong-number,.b-Not-reachable{background:#C430301A;color:var(--bad)} .b-New{background:var(--brand-tint);color:var(--brand)}
+@media(prefers-color-scheme:dark){.b-Payment-pending{background:#3A2E14}.b-Shortlisted{color:#C4B5FD}}
+.mode{display:inline-flex;border:1px solid var(--line);border-radius:11px;padding:3px;background:var(--paper);flex:none}
+.mode button{border:0;background:none;padding:6px 12px;border-radius:8px;font-weight:700;font-size:13px;color:var(--soft);cursor:pointer;white-space:nowrap}
+.mode button.on{background:var(--card);color:var(--brand);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.mode-mob{position:sticky;top:calc(60px + env(safe-area-inset-top));z-index:19;background:var(--card);border-bottom:1px solid var(--line);padding:8px 16px;display:flex;justify-content:center}
+.mode-mob .mode{width:100%;max-width:420px} .mode-mob .mode button{flex:1}
+.mode-desk{display:none} @media(min-width:900px){.mode-desk{display:inline-flex}.mode-mob{display:none}}
 .msg{border-radius:10px;padding:10px 14px;font-size:14px;border:1px solid}
 .msg.bad{border-color:color-mix(in srgb,var(--bad) 30%,transparent);color:var(--bad);background:color-mix(in srgb,var(--bad) 6%,transparent)}
 .msg.warn{border-color:color-mix(in srgb,var(--warn) 35%,transparent);color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,var(--card))}
@@ -158,6 +171,7 @@ const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x
 const fDate = d => d ? `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}` : '—';
 const fShort = d => d ? `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]}` : '—';
 const fTime = t => { if (!t) return ''; let [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')} ${ap}`; };
+const fDateTime = iso => iso ? new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)) : '—';
 const weekday = d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d + 'T00:00:00Z').getUTCDay()];
 const badge = s => html`<span className=${'badge b-' + String(s).replace(/ /g, '-')}>${s}</span>`;
 const wa = n => n ? 'https://wa.me/' + n.replace(/\D/g, '').replace(/^0/, '').replace(/^(\d{10})$/, '91$1') : null;
@@ -166,6 +180,9 @@ const clean = t => (t || '').replace(/[%,()]/g, ' ').trim();
 const followState = d => !d ? '' : d < todayStr() ? 'overdue' : d === todayStr() ? 'today' : '';
 const nice = e => {
   const m = e?.message || String(e);
+  if (m.includes('one_lead_per_phone')) return 'This phone number is already in the CRM as a lead.';
+  if (m.includes('leads_check')) return 'Record the payment before moving to this stage.';
+  if (m.includes('reassign leads')) return 'Only the coordinator can reassign leads.';
   if (m.includes('one_school_per_place')) return 'This school already exists in this district and city.';
   if (m.includes('one_school_per_phone')) return 'Another school already uses this phone number.';
   if (m.includes('row-level security')) return 'You don’t have permission for this school.';
@@ -190,6 +207,8 @@ const I = {   // tiny inline icons
   cal: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>`,
   chart: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>`,
   team: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c1-4 4-6 7-6s6 2 7 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2 1 3.4 3 4 6"/></svg>`,
+  lead: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="10" cy="8" r="4"/><path d="M3 21c1-4 4-6 7-6 1.6 0 3 .4 4.2 1.2M18 14v6M15 17h6"/></svg>`,
+  plug: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg>`,
   phone: html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>`,
   wa: html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21l1.6-4.8A9 9 0 1 1 8 19.6z"/></svg>`,
 };
@@ -278,7 +297,7 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
     { n: due.filter(s => s.next_follow_up < today).length, l: 'Overdue follow-ups', alert: true, go: { follow: 'overdue' } },
   ];
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
-  const officers = team.filter(t => t.role !== 'admin' && t.active).map(t => {
+  const officers = team.filter(t => !['admin','telecaller'].includes(t.role) && t.active).map(t => {
     const roleTag = t.role === 'coordinator' ? ' (Coordinator)' : t.role === 'manager' ? ' (Manager)' : '';
     const mine = schools.filter(s => s.officer_id === t.id), a = acts.filter(x => x.officer_id === t.id);
     return { id: t.id, name: t.name + roleTag, schools: mine.length, calls: a.filter(x => x.type === 'Call').length,
@@ -367,7 +386,7 @@ function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump })
       <input className="input" placeholder="Search name, ID, city, phone…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
       <${Select} value=${status} onChange=${setStatus} options=${STATUSES} blank="All statuses" aria-label="Status"/>
       <${Select} value=${district} onChange=${setDistrict} options=${C.DISTRICTS} blank="All districts" aria-label="District"/>
-      ${isMgr && html`<${Select} value=${officer} onChange=${setOfficer} options=${[{ value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))]} blank="All officers" aria-label="Officer"/>`}
+      ${isMgr && html`<${Select} value=${officer} onChange=${setOfficer} options=${[{ value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))]} blank="All officers" aria-label="Officer"/>`}
       <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'today', label: 'Follow-up today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any follow-up" aria-label="Follow-up"/>
     </div>
     ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No schools match. Clear a filter or add a school.</div>` : html`
@@ -421,7 +440,7 @@ function SchoolForm({ me, team, school, onClose, onSaved }) {
       <${Field} label="WhatsApp number"><input className="input" type="tel" value=${f.whatsapp || ''} onInput=${set('whatsapp')}/><//>
       <${Field} label="Email"><input className="input" type="email" value=${f.email || ''} onInput=${set('email')}/><//>
       <${Field} label="Student strength"><input className="input" type="number" min="0" value=${f.students ?? ''} onInput=${set('students')}/><//>
-      <${Field} label="Assigned officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))} blank="Unassigned"/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
+      <${Field} label="Assigned officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))} blank="Unassigned"/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
       <${Field} label="Lead source"><${Select} value=${f.source} onChange=${set('source')} options=${C.SOURCES} blank="—"/><//>
       <${Field} label="Status"><${Select} value=${f.status} onChange=${set('status')} options=${STATUSES}/><//>
       <${Field} label="Next follow-up"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
@@ -449,7 +468,7 @@ function OutreachForm({ me, team, schoolId, onSaved }) {
     <div className="form two">
       <${Field} label="Date"><input className="input" type="date" max=${todayStr()} required value=${f.done_on} onInput=${set('done_on')}/><//>
       <${Field} label="Outcome"><${Select} value=${f.outcome} onChange=${set('outcome')} options=${OUTCOMES}/><//>
-      ${me.role !== 'officer' && html`<${Field} label="Officer"><${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))}/><//>`}
+      ${me.role !== 'officer' && html`<${Field} label="Officer"><${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))}/><//>`}
       <${Field} label="Next follow-up *"><input className="input" type="date" required value=${f.next_follow_up} onInput=${set('next_follow_up')}/><//>
       <${Field} label="Remarks *" full><textarea className="input" rows="2" required placeholder="Who you spoke to and what they said" value=${f.remarks} onInput=${set('remarks')}/><//>
     </div>
@@ -608,7 +627,7 @@ function ProgrammeForm({ me, team, programme, school, onClose, onSaved }) {
       <div className="form two" style=${{ gap: 10 }}><${Field} label="Starts *"><input className="input" type="time" required value=${(f.start_time || '').slice(0, 5)} onInput=${set('start_time')}/><//>
         <${Field} label="Ends *"><input className="input" type="time" required value=${(f.end_time || '').slice(0, 5)} onInput=${set('end_time')}/><//></div>
       <${Field} label="Expected students *"><input className="input" type="number" min="1" required value=${f.expected ?? ''} onInput=${set('expected')}/><//>
-      <${Field} label="Outreach officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && t.role !== 'coordinator').map(t => ({ value: t.id, label: t.name }))} blank="Choose…" required/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
+      <${Field} label="Outreach officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && !['coordinator','telecaller'].includes(t.role)).map(t => ({ value: t.id, label: t.name }))} blank="Choose…" required/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
       <${Field} label="School coordinator"><input className="input" value=${f.coordinator || ''} onInput=${set('coordinator')}/><//>
       <${Field} label="Status"><${Select} value=${f.status} onChange=${set('status')} options=${P_STATUSES.filter(s => s !== 'Completed')}/><//>
       <${Field} label="Internal notes" full><textarea className="input" rows="2" value=${f.notes || ''} onInput=${set('notes')} placeholder="Transport, speakers, materials…"/><//>
@@ -680,7 +699,7 @@ async function buildReport(key, team) {
       .sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up)).map(s => ({ 'School ID': s.code, School: s.name, District: s.district, Contact: s.coordinator || s.principal, Phone: s.phone,
         Officer: nameOf(s.officer_id), Status: s.status, 'Last contact': s.last_contact, 'Due': s.next_follow_up, 'Days overdue': Math.round((Date.parse(today) - Date.parse(s.next_follow_up)) / 864e5) })) };
     const [A, P] = await Promise.all([fetchAll(() => db.from('outreach').select('officer_id,type')), fetchAll(() => db.from('programmes').select('officer_id,status,actual'))]);
-    return { Officers: team.filter(t => t.role !== 'admin').map(t => { const mine = S.filter(s => s.officer_id === t.id), a = A.filter(x => x.officer_id === t.id), p = P.filter(x => x.officer_id === t.id && x.status === 'Completed');
+    return { Officers: team.filter(t => !['admin','telecaller'].includes(t.role)).map(t => { const mine = S.filter(s => s.officer_id === t.id), a = A.filter(x => x.officer_id === t.id), p = P.filter(x => x.officer_id === t.id && x.status === 'Completed');
       return { Officer: t.name, Active: t.active ? 'Yes' : 'No', Schools: mine.length, Calls: a.filter(x => x.type === 'Call').length, Visits: a.filter(x => x.type === 'School visit').length,
         Meetings: a.filter(x => x.type.includes('meeting')).length, 'WhatsApp / email / follow-ups': a.filter(x => ['WhatsApp','Email','Follow-up'].includes(x.type)).length,
         Confirmed: mine.filter(confirmed).length, 'Programmes completed': p.length, 'Students reached': p.reduce((s, x) => s + (x.actual || 0), 0),
@@ -732,7 +751,7 @@ function BulkUpload({ team, onClose, onDone }) {
     } catch { setErr('Could not read this file. Use .xlsx, .xls or .csv.'); }
     e.target.value = '';
   };
-  const findOfficer = v => { const x = v.toLowerCase(); return x ? team.find(t => t.active && (t.email.toLowerCase() === x || t.name.toLowerCase() === x))?.id || null : null; };
+  const findOfficer = v => { const x = v.toLowerCase(); return x ? team.find(t => t.active && t.role !== 'telecaller' && (t.email.toLowerCase() === x || t.name.toLowerCase() === x))?.id || null : null; };
   const run = async () => {
     let added = 0; const skipped = []; const seen = new Set();
     for (let i = 0; i < rows.length; i++) {
@@ -786,7 +805,7 @@ function BulkUpload({ team, onClose, onDone }) {
 /* ====================================================================
    9. TEAM (admin) — add, remove, reset passwords; saved in Supabase
    ==================================================================== */
-const ROLE_OPTS = [{ value: 'officer', label: 'Outreach Officer' }, { value: 'coordinator', label: 'Marketing Coordinator' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
+const ROLE_OPTS = [{ value: 'officer', label: 'Outreach Officer' }, { value: 'telecaller', label: 'Telecaller (Young CEO leads)' }, { value: 'coordinator', label: 'Marketing Coordinator' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
 const suggestPw = () => 'Aimer@' + Math.floor(1000 + Math.random() * 9000);
 function AddMember({ onClose, onSaved, toast }) {
   const [f, set] = useForm({ name: '', email: '', phone: '', role: 'officer', password: suggestPw() });
@@ -838,20 +857,540 @@ function Team({ me, team, reloadTeam, toast }) {
     <td><input className="input" defaultValue=${t.name} onBlur=${e => e.target.value.trim() && e.target.value.trim() !== t.name && save(t, { name: e.target.value.trim() })} aria-label="Name" disabled=${!t.active}/></td>
     <td className="small">${t.email}</td>
     <td><input className="input" defaultValue=${t.phone || ''} onBlur=${e => e.target.value !== (t.phone || '') && save(t, { phone: e.target.value || null })} aria-label="Phone" disabled=${!t.active}/></td>
-    <td><${Select} value=${t.role} onChange=${v => save(t, { role: v })} options=${ROLE_OPTS} aria-label="Role" disabled=${!t.active || t.id === me.id} style=${{ minWidth: 200 }}/></td>
+    <td><${Select} value=${t.role} onChange=${v => save(t, { role: v })} options=${ROLE_OPTS} aria-label="Role" disabled=${!t.active || t.id === me.id} style=${{ minWidth: 230 }}/></td>
     <td style=${{ whiteSpace: 'nowrap' }}>${t.active ? html`<button className="btn sm" onClick=${() => setModal({ k: 'pw', t })}>Password</button>
       ${t.id !== me.id && html` <button className="btn sm danger" onClick=${() => setActive(t, false)}>Remove</button>`}`
       : html`<button className="btn sm" onClick=${() => setActive(t, true)}>Restore</button>`}</td></tr>`;
   return html`
-    <div className="head"><div><h1>Team</h1><p>${active.filter(t => t.role === 'officer').length} officers · ${active.filter(t => t.role === 'coordinator').length} coordinators · ${active.filter(t => t.role === 'manager').length} managers · ${active.filter(t => t.role === 'admin').length} admins</p></div>
+    <div className="head"><div><h1>Team</h1><p>${active.filter(t => t.role === 'officer').length} officers · ${active.filter(t => t.role === 'telecaller').length} telecallers · ${active.filter(t => t.role === 'coordinator').length} coordinators · ${active.filter(t => t.role === 'manager').length} managers · ${active.filter(t => t.role === 'admin').length} admins</p></div>
       <button className="btn gold" onClick=${() => setModal({ k: 'add' })}>+ Add member</button></div>
     <div className="card scroll"><table><thead><tr><th>Name</th><th>Email (login)</th><th>Phone</th><th>Role</th><th></th></tr></thead>
       <tbody>${active.map(row)}${!active.length && html`<tr><td colSpan="5" className="muted">No members yet.</td></tr>`}</tbody></table></div>
-    <p className="soft small">Outreach Officer = only their own schools, visits and calls · Marketing Coordinator = all schools, calls and follow-ups for the whole team, reassign, reports, bulk upload (no school visits) · Manager = same access as Coordinator · Admin = everything, including this page. Name, phone and role save as soon as you change them.</p>
+    <p className="soft small">Outreach Officer = School Outreach only, their own schools · Telecaller = Young CEO Leads only, their own leads · Marketing Coordinator = both CRMs, all schools and leads, reassign, reports, bulk upload · Manager = same access as Coordinator · Admin = everything, including this page. Name, phone and role save as soon as you change them.</p>
     ${removed.length > 0 && html`<button className="btn sm" style=${{ marginTop: 6 }} onClick=${() => setShowOld(!showOld)}>${showOld ? 'Hide' : 'Show'} removed members (${removed.length})</button>
       ${showOld && html`<div className="card scroll" style=${{ marginTop: 10, opacity: .8 }}><table><tbody>${removed.map(row)}</tbody></table></div>`}`}
     ${modal?.k === 'add' && html`<${AddMember} toast=${toast} onClose=${() => setModal(null)} onSaved=${reloadTeam}/>`}
     ${modal?.k === 'pw' && html`<${SetPassword} member=${modal.t} toast=${toast} onClose=${() => setModal(null)}/>`}`;
+}
+
+/* ====================================================================
+   YOUNG CEO LEADS CRM
+   ==================================================================== */
+const LEAD_STAGES = ['New','Contacted','Interested','Payment pending','Paid','Idea submitted','Shortlisted','Not interested','Wrong number','Not reachable'];
+const PIPELINE = ['New','Contacted','Interested','Payment pending','Paid','Idea submitted','Shortlisted'];
+const NO_FOLLOW = ['Not interested','Wrong number','Idea submitted','Shortlisted'];
+const PAID_STAGES = ['Paid','Idea submitted','Shortlisted'];
+const LEAD_SOURCES = ['Meta Ads','Website','Preliminary programme','Referral','Walk-in / call','School outreach','Other'];
+const LEAD_CATS = ['Grade 9','Grade 10','Grade 11','Grade 12','UG final year','Other'];
+const CALL_OUTCOMES = ['Connected','Interested','Call back later','No answer','Busy','Switched off','Not interested','Wrong number'];
+const PAY_MODES = ['UPI','Card','Net banking','Bank transfer','Cash'];
+const istDate = iso => iso ? new Date(new Date(iso).getTime() + 5.5 * 3600e3).toISOString().slice(0, 10) : null;
+const callers = team => team.filter(t => t.active && ['telecaller', 'coordinator'].includes(t.role));
+const fee = () => C.REG_FEE || 299;
+const inr = n => '₹' + Math.round(n || 0).toLocaleString('en-IN');
+const payMsg = (lead, me) => `Hi ${lead.name.split(' ')[0]}, this is ${me.name.split(' ')[0]} from AIMER Business School.\n\nAimer Young CEO 2.0 — ₹10 Lakh total prize money, with MediaOne TV & digital visibility.\n\nComplete your registration (₹${fee()}) here:\n${C.PAYMENT_LINK || '[payment link]'}\n\nAfter paying, please share the payment screenshot here.`;
+const ideaMsg = (lead, me) => `Hi ${lead.name.split(' ')[0]}, thank you for registering for Aimer Young CEO 2.0! 🎉\n\nNext step: submit your business idea here:\n${C.IDEA_FORM_LINK || '[idea submission link]'}\n\n— ${me.name.split(' ')[0]}, AIMER Business School`;
+const waText = (n, text) => n ? wa(n) + '?text=' + encodeURIComponent(text) : null;
+
+/* ---------- Lead dashboard ---------- */
+function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
+  const [d, setD] = useState(null);
+  const isMgr = me.role !== 'telecaller';
+  const load = async () => {
+    const today = todayStr();
+    const [leads, acts] = await Promise.all([
+      fetchAll(() => db.from('leads').select('id,name,phone,whatsapp,stage,source,campaign,category,school_name,district,telecaller_id,next_follow_up,created_at,paid_at,amount,idea_at,no_answer_count')),
+      fetchAll(() => db.from('lead_activities').select('type,outcome,by_user,created_at').gte('created_at', today + 'T00:00:00+05:30')),
+    ]);
+    setD({ leads, acts, today });
+  };
+  useEffect(() => { load().catch(e => toast(nice(e))); }, [refreshKey]);
+  if (!d) return html`<p className="muted">Loading…</p>`;
+  const { leads, acts, today } = d;
+  const paid = leads.filter(l => PAID_STAGES.includes(l.stage));
+  const due = leads.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= today)
+    .sort((a, b) => (a.stage === 'New' ? 0 : 1) - (b.stage === 'New' ? 0 : 1) || a.next_follow_up.localeCompare(b.next_follow_up));
+  const callsToday = acts.filter(a => a.type === 'Call');
+  const myCalls = callsToday.filter(a => a.by_user === me.id).length;
+  const unassigned = leads.filter(l => !l.telecaller_id && !['Not interested','Wrong number'].includes(l.stage)).length;
+  const conv = leads.length ? Math.round(paid.length / leads.length * 100) : 0;
+  const stats = [
+    { n: leads.length, l: isMgr ? 'Total leads' : 'My leads', go: {} },
+    { n: leads.filter(l => istDate(l.created_at) === today).length, l: 'New today', go: { stage: 'New' } },
+    { n: due.length, l: 'Follow-ups due', go: { follow: 'due' }, alert: due.some(l => l.next_follow_up < today) },
+    { n: leads.filter(l => l.stage === 'Payment pending').length, l: 'Payment pending', go: { stage: 'Payment pending' } },
+    { n: paid.length, l: `Paid · ${inr(paid.reduce((a, l) => a + (+l.amount || 0), 0))}`, go: { stage: 'Paid' } },
+    { n: leads.filter(l => ['Idea submitted','Shortlisted'].includes(l.stage)).length, l: 'Ideas submitted', go: { stage: 'Idea submitted' } },
+  ];
+  const byStage = LEAD_STAGES.map(s => ({ s, n: leads.filter(l => l.stage === s).length }));
+  const maxStage = Math.max(1, ...byStage.map(x => x.n));
+  const people = callers(team).map(t => {
+    const mine = leads.filter(l => l.telecaller_id === t.id), p = mine.filter(l => PAID_STAGES.includes(l.stage));
+    return { id: t.id, name: t.name + (t.role === 'coordinator' ? ' (Coordinator)' : ''), leads: mine.length,
+      calls: callsToday.filter(a => a.by_user === t.id).length, fresh: mine.filter(l => l.stage === 'New').length,
+      due: mine.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= today).length,
+      paid: p.length, conv: mine.length ? Math.round(p.length / mine.length * 100) : 0 };
+  }).sort((a, b) => b.paid - a.paid || b.calls - a.calls);
+  const sources = Object.entries(leads.reduce((m, l) => { const k = l.source || 'Other'; (m[k] ||= []).push(l); return m; }, {}))
+    .map(([k, v]) => ({ k, n: v.length, p: v.filter(l => PAID_STAGES.includes(l.stage)).length })).sort((a, b) => b.n - a.n);
+  const share = async () => { const { data, error } = await db.rpc('distribute_unassigned_leads'); if (error) toast(nice(error)); else { toast(`${data} leads shared among telecallers`); bump(); } };
+  const queue = due.map(l => l.id);
+
+  return html`
+    <div className="head"><div><h1>${isMgr ? 'Young CEO Leads' : `Hello, ${me.name.split(' ')[0]}`}</h1>
+      <p>${isMgr ? `${conv}% of leads have paid · ${callsToday.length} call${callsToday.length === 1 ? '' : 's'} logged today` : `${myCalls} call${myCalls === 1 ? '' : 's'} today · ${due.length} lead${due.length === 1 ? '' : 's'} to call`}</p></div>
+      <div className="row"><button className="btn gold" onClick=${() => go('leads', { add: true })}>+ Add lead</button>
+        ${isMgr && html`<button className="btn" onClick=${() => go('leads', { bulk: true })}>Bulk upload</button>`}</div></div>
+    ${isMgr && unassigned > 0 && html`<div className="msg warn row" style=${{ justifyContent: 'space-between', marginBottom: 14 }}><span><b>${unassigned} lead${unassigned === 1 ? ' has' : 's have'} no telecaller.</b> ${callers(team).some(t => t.role === 'telecaller') ? 'Share them out in turn.' : 'Add a telecaller in the Team tab first.'}</span>
+      ${callers(team).some(t => t.role === 'telecaller') && html`<button className="btn sm" onClick=${share}>Share them out</button>`}</div>`}
+    <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert ? ' alert' : '')} onClick=${() => go('leads', s.go)}><div className="num">${s.n}</div><p>${s.l}</p></button>`)}</div>
+
+    <div className="grid g2">
+      <div className="card"><div className="item"><h2 className="grow">Call now</h2>
+        ${due.length > 0 && html`<button className="btn sm primary" onClick=${() => openLead(queue[0], queue)}>Start calling (${due.length})</button>`}</div>
+        <div className="list">${due.slice(0, 12).map(l => html`<div key=${l.id} className="item">
+          <div className="grow click" onClick=${() => openLead(l.id, queue)}><div className="row" style=${{ gap: 6 }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
+            <div className="trunc small muted">${[l.category, l.school_name, l.source].filter(Boolean).join(' · ')}${isMgr ? ' · ' + (team.find(t => t.id === l.telecaller_id)?.name || 'Unassigned') : ''}</div></div>
+          <span className=${'small ' + (l.next_follow_up < today ? 'bad' : 'warn')} style=${{ fontWeight: 700 }}>${l.stage === 'New' ? 'New' : l.next_follow_up < today ? fShort(l.next_follow_up) : 'Today'}</span>
+          <a className="icon" href=${tel(l.phone)} aria-label="Call">${I.phone}</a>
+          <a className="icon ok" href=${wa(l.whatsapp || l.phone)} target="_blank" aria-label="WhatsApp">${I.wa}</a></div>`)}
+        ${!due.length && html`<p className="pad muted small">Nothing due right now. Great work.</p>`}</div></div>
+
+      <div className="card pad"><h2 style=${{ marginBottom: 14 }}>Leads by stage</h2><div className="dist">
+        ${byStage.filter(x => x.n || PIPELINE.includes(x.s)).map(x => html`<div key=${x.s} className="click" onClick=${() => go('leads', { stage: x.s })}>
+          <div className="row small" style=${{ justifyContent: 'space-between' }}><span>${x.s}</span><b>${x.n}</b></div>
+          <div className="track"><i style=${{ width: x.n / maxStage * 100 + '%', background: ['Not interested','Wrong number','Not reachable'].includes(x.s) ? 'color-mix(in srgb,var(--bad) 45%,transparent)' : PAID_STAGES.includes(x.s) ? 'var(--ok)' : 'var(--brand)' }}/></div></div>`)}
+      </div></div>
+    </div>
+
+    ${isMgr && html`<div className="grid g2" style=${{ marginTop: 16 }}>
+      <div className="card scroll"><div className="item"><h2>Telecaller performance</h2></div>
+        <table><thead><tr><th>Telecaller</th><th className="r">Leads</th><th className="r">Calls today</th><th className="r">Not called</th><th className="r">Due</th><th className="r">Paid</th><th className="r">Conv.</th></tr></thead>
+        <tbody>${people.map(o => html`<tr key=${o.id}><td><b>${o.name}</b></td><td className="r">${o.leads}</td><td className="r">${o.calls}</td><td className=${'r' + (o.fresh ? ' warn' : '')}>${o.fresh}</td><td className=${'r' + (o.due ? ' bad' : '')}>${o.due}</td><td className="r ok"><b>${o.paid}</b></td><td className="r">${o.conv}%</td></tr>`)}
+        ${!people.length && html`<tr><td colSpan="7" className="muted">Add telecallers in the Team tab.</td></tr>`}</tbody></table></div>
+      <div className="card scroll"><div className="item"><h2>Where leads come from</h2></div>
+        <table><thead><tr><th>Source</th><th className="r">Leads</th><th className="r">Paid</th><th className="r">Conv.</th></tr></thead>
+        <tbody>${sources.map(s => html`<tr key=${s.k} className="click" onClick=${() => go('leads', { source: s.k })}><td><b>${s.k}</b></td><td className="r">${s.n}</td><td className="r ok">${s.p}</td><td className="r">${Math.round(s.p / s.n * 100)}%</td></tr>`)}
+        ${!sources.length && html`<tr><td colSpan="4" className="muted">No leads yet.</td></tr>`}</tbody></table></div>
+    </div>`}`;
+}
+
+/* ---------- Leads list ---------- */
+function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }) {
+  const isMgr = me.role !== 'telecaller';
+  const [q, setQ] = useState(''); const [stage, setStage] = useState(params.stage || ''); const [source, setSource] = useState(params.source || '');
+  const [cat, setCat] = useState(''); const [owner, setOwner] = useState(''); const [follow, setFollow] = useState(params.follow || '');
+  const [page, setPage] = useState(0); const [rows, setRows] = useState(null); const [total, setTotal] = useState(0);
+  const [sel, setSel] = useState([]); const [bulk, setBulk] = useState(false);
+  useEffect(() => { if (params.add) editLead(null); if (params.bulk && isMgr) setBulk(true); }, []);
+  useEffect(() => {
+    let alive = true;
+    const t = setTimeout(async () => {
+      let x = db.from('leads').select('id,code,name,phone,stage,source,category,school_name,district,telecaller_id,next_follow_up,last_contact,created_at', { count: 'exact' });
+      const s = clean(q); if (s) x = x.or(`name.ilike.%${s}%,phone.ilike.%${s}%,code.ilike.%${s}%,school_name.ilike.%${s}%,email.ilike.%${s}%`);
+      if (stage) x = x.eq('stage', stage); if (source) x = x.eq('source', source); if (cat) x = x.eq('category', cat);
+      if (owner === 'none') x = x.is('telecaller_id', null); else if (owner) x = x.eq('telecaller_id', owner);
+      const notDone = '("Not interested","Wrong number","Idea submitted","Shortlisted")';
+      if (follow === 'due') x = x.lte('next_follow_up', todayStr()).not('stage', 'in', notDone);
+      if (follow === 'overdue') x = x.lt('next_follow_up', todayStr()).not('stage', 'in', notDone);
+      if (follow === 'today') x = x.eq('next_follow_up', todayStr()).not('stage', 'in', notDone);
+      const { data, count, error } = await x.order('created_at', { ascending: false }).range(page * PAGE, page * PAGE + PAGE - 1);
+      if (error) toast(nice(error));
+      if (alive) { setRows(data || []); setTotal(count || 0); setSel([]); }
+    }, 250);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q, stage, source, cat, owner, follow, page, refreshKey]);
+  useEffect(() => setPage(0), [q, stage, source, cat, owner, follow]);
+  const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
+  const pages = Math.max(1, Math.ceil(total / PAGE));
+  const assign = async to => { if (!sel.length) return;
+    const { error } = await db.from('leads').update({ telecaller_id: to || null }).in('id', sel);
+    if (error) toast(nice(error)); else { toast(`${sel.length} leads reassigned`); bump(); } };
+  const ids = (rows || []).map(r => r.id);
+
+  return html`
+    <div className="head"><div><h1>Leads</h1><p>${total} lead${total === 1 ? '' : 's'}${isMgr ? '' : ' assigned to you'}</p></div>
+      <div className="row">${isMgr && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}<button className="btn primary" onClick=${() => editLead(null)}>+ Add lead</button></div></div>
+    ${bulk && html`<${LeadBulkUpload} me=${me} team=${team} onClose=${() => setBulk(false)} onDone=${bump}/>`}
+    <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', marginBottom: 14 }}>
+      <input className="input" placeholder="Search name, phone, ID, school…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
+      <${Select} value=${stage} onChange=${setStage} options=${LEAD_STAGES} blank="All stages" aria-label="Stage"/>
+      <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'due', label: 'Follow-up due' }, { value: 'today', label: 'Due today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any follow-up" aria-label="Follow-up"/>
+      <${Select} value=${source} onChange=${setSource} options=${LEAD_SOURCES} blank="All sources" aria-label="Source"/>
+      <${Select} value=${cat} onChange=${setCat} options=${LEAD_CATS} blank="All grades" aria-label="Grade"/>
+      ${isMgr && html`<${Select} value=${owner} onChange=${setOwner} options=${[{ value: 'none', label: 'Unassigned' }, ...callers(team).map(t => ({ value: t.id, label: t.name }))]} blank="All telecallers" aria-label="Telecaller"/>`}
+    </div>
+    ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No leads match. Clear a filter, add a lead, or bulk upload.</div>` : html`
+      <div className="card list hide-lg">${rows.map(l => html`<div key=${l.id} className="item click" onClick=${() => openLead(l.id, ids)}>
+        <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
+          <div className="small muted">${[l.category, l.school_name, l.source].filter(Boolean).join(' · ')}</div>
+          <div className="small">Follow-up: <b className=${followState(l.next_follow_up) === 'overdue' && !NO_FOLLOW.includes(l.stage) ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}>${NO_FOLLOW.includes(l.stage) ? '—' : fDate(l.next_follow_up)}</b>${isMgr ? html`<span className="muted"> · ${nameOf(l.telecaller_id)}</span>` : ''}</div></div></div>`)}</div>
+      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${sel.length === rows.length} onChange=${e => setSel(e.target.checked ? ids : [])}/></th>`}<th>Lead</th><th>Grade / school</th><th>Source</th><th>Stage</th>${isMgr && html`<th>Telecaller</th>`}<th>Last contact</th><th>Follow-up</th></tr></thead>
+        <tbody>${rows.map(l => html`<tr key=${l.id} className="click" onClick=${() => openLead(l.id, ids)}>
+          ${isMgr && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + l.name} checked=${sel.includes(l.id)} onChange=${e => setSel(e.target.checked ? [...sel, l.id] : sel.filter(x => x !== l.id))}/></td>`}
+          <td><b>${l.name}</b><div className="small muted">${l.code} · ${l.phone}</div></td>
+          <td>${l.category || '—'}<div className="small muted">${l.school_name || ''}</div></td>
+          <td className="small">${l.source}</td><td>${badge(l.stage)}</td>${isMgr && html`<td className="small">${nameOf(l.telecaller_id)}</td>`}
+          <td className="small">${fDate(l.last_contact)}</td>
+          <td className=${NO_FOLLOW.includes(l.stage) ? 'muted' : followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}><b>${NO_FOLLOW.includes(l.stage) ? '—' : fDate(l.next_follow_up)}</b></td></tr>`)}</tbody></table></div>
+      ${isMgr && sel.length > 0 && html`<div className="row hide-sm" style=${{ marginTop: 10 }}><span className="small"><b>${sel.length} selected</b> — assign to</span>
+        <${Select} value="" onChange=${assign} options=${[{ value: 'none', label: 'Unassigned' }, ...callers(team).map(t => ({ value: t.id, label: t.name }))].map(o => o.value === 'none' ? { value: '', label: 'Unassigned' } : o)} blank="Choose…" style=${{ width: 220 }}/></div>`}
+      <div className="row" style=${{ justifyContent: 'space-between', marginTop: 12 }}><span className="small muted">Page ${page + 1} of ${pages}</span>
+        <div className="row"><button className="btn sm" disabled=${page === 0} onClick=${() => setPage(page - 1)}>Previous</button><button className="btn sm" disabled=${page + 1 >= pages} onClick=${() => setPage(page + 1)}>Next</button></div></div>`}`;
+}
+
+/* ---------- Add / edit lead ---------- */
+function LeadForm({ me, team, lead, onClose, onSaved }) {
+  const isMgr = me.role !== 'telecaller';
+  const [f, set] = useForm(lead || { source: 'Walk-in / call', category: '', telecaller_id: '' });
+  const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
+  const save = async e => {
+    e.preventDefault(); setErr(null);
+    if ((f.phone || '').replace(/\D/g, '').length < 8) return setErr('Enter a valid phone number.');
+    setBusy(true);
+    const row = { name: f.name?.trim(), phone: f.phone?.trim(), whatsapp: f.whatsapp || null, email: f.email ? f.email.trim().toLowerCase() : null,
+      category: f.category || null, school_name: f.school_name || null, district: f.district || null, city: f.city || null, parent_name: f.parent_name || null,
+      source: f.source || 'Other', campaign: f.campaign || null, remarks: f.remarks || null, next_follow_up: f.next_follow_up || null };
+    if (isMgr && (!lead || f.telecaller_id !== lead.telecaller_id)) row.telecaller_id = f.telecaller_id || null;
+    if (!lead && !row.next_follow_up) delete row.next_follow_up;
+    const res = lead ? await db.from('leads').update(row).eq('id', lead.id).select('id').single() : await db.from('leads').insert(row).select('id').single();
+    setBusy(false);
+    if (res.error) setErr(nice(res.error)); else onSaved(res.data.id);
+  };
+  return html`<${Modal} title=${lead ? 'Edit ' + lead.name : 'Add lead'} sub=${lead ? lead.code : isMgr ? 'Leave telecaller blank to assign automatically, in turn.' : 'This lead will be assigned to you.'} onClose=${onClose}>
+    <form className="form two" onSubmit=${save}>
+      <${Field} label="Student name *"><input className="input" required value=${f.name || ''} onInput=${set('name')}/><//>
+      <${Field} label="Phone *"><input className="input" type="tel" required value=${f.phone || ''} onInput=${set('phone')} placeholder="+91 98xxxxxxxx"/><//>
+      <${Field} label="WhatsApp (if different)"><input className="input" type="tel" value=${f.whatsapp || ''} onInput=${set('whatsapp')}/><//>
+      <${Field} label="Email"><input className="input" type="email" value=${f.email || ''} onInput=${set('email')}/><//>
+      <${Field} label="Grade / category"><${Select} value=${f.category} onChange=${set('category')} options=${LEAD_CATS} blank="—"/><//>
+      <${Field} label="Parent's name"><input className="input" value=${f.parent_name || ''} onInput=${set('parent_name')}/><//>
+      <${Field} label="School / college" full><input className="input" value=${f.school_name || ''} onInput=${set('school_name')}/><//>
+      <${Field} label="District"><${Select} value=${f.district} onChange=${set('district')} options=${C.DISTRICTS} blank="—"/><//>
+      <${Field} label="City / town"><input className="input" value=${f.city || ''} onInput=${set('city')}/><//>
+      <${Field} label="Lead source"><${Select} value=${f.source} onChange=${set('source')} options=${LEAD_SOURCES}/><//>
+      <${Field} label="Campaign / ad / programme"><input className="input" value=${f.campaign || ''} onInput=${set('campaign')} placeholder="e.g. YCEO Nov Reels"/><//>
+      ${isMgr && html`<${Field} label="Telecaller"><${Select} value=${f.telecaller_id} onChange=${set('telecaller_id')} options=${callers(team).map(t => ({ value: t.id, label: t.name }))} blank=${lead ? 'Unassigned' : 'Auto (in turn)'}/><//>`}
+      <${Field} label="Next follow-up"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
+      <${Field} label="Remarks" full><textarea className="input" rows="2" value=${f.remarks || ''} onInput=${set('remarks')}/><//>
+      ${err && html`<div className="msg bad full">${err}</div>`}
+      <div className="row full"><button className="btn primary" disabled=${busy}>${busy ? 'Saving…' : lead ? 'Save changes' : 'Add lead'}</button><button type="button" className="btn" onClick=${onClose}>Cancel</button></div>
+    </form><//>`;
+}
+
+/* ---------- Lead detail: the telecaller's workspace ---------- */
+function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, bump }) {
+  const isMgr = me.role !== 'telecaller';
+  const [l, setL] = useState(null); const [hist, setHist] = useState([]); const [panel, setPanel] = useState('call');
+  const [out, setOut] = useState(''); const [remarks, setRemarks] = useState(''); const [next, setNext] = useState(addDays(todayStr(), 1));
+  const [pay, setPay] = useState({ amount: fee(), ref: '', date: todayStr(), mode: 'UPI' });
+  const [idea, setIdea] = useState({ title: '', link: '', date: todayStr() });
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    const [a, b] = await Promise.all([db.from('leads').select('*').eq('id', id).single(),
+      db.from('lead_activities').select('*').eq('lead_id', id).order('created_at', { ascending: false })]);
+    if (a.error) { toast('This lead isn’t available to you.'); return onClose(); }
+    setL(a.data); setHist(b.data || []);
+  };
+  useEffect(() => { setL(null); setOut(''); setRemarks(''); setNext(addDays(todayStr(), 1)); setPanel('call'); load(); }, [id]);
+  if (!l) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
+  const nameOf = x => team.find(t => t.id === x)?.name || (x ? 'Team member' : 'System');
+  const pos = queue ? queue.indexOf(id) : -1, nextId = pos >= 0 ? queue[pos + 1] : null;
+  const closing = ['Not interested', 'Wrong number'].includes(out);
+  const done = msg => { toast(msg); load(); bump(); };
+
+  const logCall = async () => {
+    if (!out) return toast('Pick what happened on the call');
+    setBusy(true);
+    const { error } = await db.from('lead_activities').insert({ lead_id: l.id, type: 'Call', outcome: out, remarks: remarks.trim() || null, next_follow_up: closing ? null : next, by_user: me.id });
+    setBusy(false);
+    if (error) return toast(nice(error));
+    setOut(''); setRemarks(''); setNext(addDays(todayStr(), 1));
+    if (nextId) { toast('Saved — next lead'); bump(); openLead(nextId, queue); } else done('Call saved');
+  };
+  const sendPayLink = async () => {
+    window.open(waText(l.whatsapp || l.phone, payMsg(l, me)), '_blank');
+    if (!PAID_STAGES.includes(l.stage) && l.stage !== 'Payment pending') await db.from('leads').update({ stage: 'Payment pending' }).eq('id', l.id);
+    await db.from('lead_activities').insert({ lead_id: l.id, type: 'WhatsApp', remarks: 'Payment link sent', next_follow_up: addDays(todayStr(), 1), by_user: me.id });
+    done('Marked as payment pending');
+  };
+  const markPaid = async () => {
+    if (!pay.ref.trim()) return toast('Enter the transaction / UTR ID');
+    setBusy(true);
+    const { error } = await db.from('leads').update({ stage: 'Paid', amount: +pay.amount || fee(), payment_ref: pay.ref.trim(), paid_at: pay.date, payment_mode: pay.mode, next_follow_up: addDays(todayStr(), 3) }).eq('id', l.id);
+    if (!error) await db.from('lead_activities').insert({ lead_id: l.id, type: 'Payment', remarks: `${inr(pay.amount)} via ${pay.mode} · Ref ${pay.ref.trim()}`, by_user: me.id });
+    setBusy(false); if (error) toast(nice(error)); else { setPanel('idea'); done('Payment recorded 🎉'); }
+  };
+  const markIdea = async () => {
+    setBusy(true);
+    const { error } = await db.from('leads').update({ stage: 'Idea submitted', idea_title: idea.title.trim() || null, idea_link: idea.link.trim() || null, idea_at: idea.date, next_follow_up: null }).eq('id', l.id);
+    if (!error) await db.from('lead_activities').insert({ lead_id: l.id, type: 'Idea', remarks: idea.title.trim() || 'Idea submitted', by_user: me.id });
+    setBusy(false); if (error) toast(nice(error)); else done('Idea marked as submitted');
+  };
+  const setStage = async s => { const patch = { stage: s }; if (PAID_STAGES.includes(s) && !l.paid_at) return toast('Record the payment first');
+    const { error } = await db.from('leads').update(patch).eq('id', l.id); if (error) toast(nice(error)); else done('Stage updated'); };
+  const reassign = async t => { const { error } = await db.from('leads').update({ telecaller_id: t || null }).eq('id', l.id); if (error) toast(nice(error)); else done('Reassigned'); };
+  const del = async () => { if (!confirm(`Delete ${l.name}? This cannot be undone.`)) return; const { error } = await db.from('leads').delete().eq('id', l.id); if (error) toast(nice(error)); else { toast('Lead deleted'); bump(); onClose(); } };
+  const stepIdx = PIPELINE.indexOf(l.stage);
+  const tabs = [['call', 'Log call'], ...(!PAID_STAGES.includes(l.stage) ? [['pay', 'Payment']] : []), ...(PAID_STAGES.includes(l.stage) && !['Idea submitted','Shortlisted'].includes(l.stage) ? [['idea', 'Idea']] : [])];
+  const info = [['Lead ID', l.code], ['Phone', l.phone], ['WhatsApp', l.whatsapp], ['Email', l.email], ['Grade', l.category], ['School', l.school_name],
+    ['Place', [l.city, l.district].filter(Boolean).join(', ')], ['Parent', l.parent_name], ['Source', [l.source, l.campaign].filter(Boolean).join(' · ')],
+    ['Telecaller', nameOf(l.telecaller_id)], ['Added', fDate(istDate(l.created_at))], ['Remarks', l.remarks]];
+  if (l.paid_at) info.push(['Payment', `${inr(l.amount)} · ${l.payment_mode || ''} · Ref ${l.payment_ref || '—'} · ${fDate(l.paid_at)}`]);
+  if (l.idea_at) info.push(['Idea', [l.idea_title, l.idea_link].filter(Boolean).join(' · ') || 'Submitted ' + fDate(l.idea_at)]);
+
+  return html`<${Modal} title=${l.name} sub=${html`${badge(l.stage)} <span style=${{ marginLeft: 6 }}>${[l.category, l.school_name].filter(Boolean).join(' · ') || l.code}</span>${queue && pos >= 0 ? html`<span className="muted"> · ${pos + 1} of ${queue.length}</span>` : ''}`} onClose=${onClose}>
+    <div className="row" style=${{ marginBottom: 12 }}>
+      <a className="btn primary" href=${tel(l.phone)}>${I.phone} Call ${l.phone}</a>
+      <a className="btn" href=${wa(l.whatsapp || l.phone)} target="_blank">${I.wa} WhatsApp</a>
+      ${!PAID_STAGES.includes(l.stage) && html`<button className="btn gold" onClick=${sendPayLink}>Send payment link</button>`}
+      ${PAID_STAGES.includes(l.stage) && !l.idea_at && html`<a className="btn gold" href=${waText(l.whatsapp || l.phone, ideaMsg(l, me))} target="_blank">Send idea form</a>`}
+      ${nextId && html`<button className="btn" onClick=${() => openLead(nextId, queue)}>Skip ›</button>`}
+    </div>
+    <div className="row" style=${{ gap: 4, marginBottom: 16, flexWrap: 'wrap' }} aria-label="Progress">
+      ${PIPELINE.map((s, i) => html`<span key=${s} className="small" style=${{ padding: '3px 9px', borderRadius: 99, fontWeight: 600,
+        background: i <= stepIdx ? (i >= 4 ? 'color-mix(in srgb,var(--ok) 16%,transparent)' : 'var(--brand-tint)') : 'var(--paper)',
+        color: i <= stepIdx ? (i >= 4 ? 'var(--ok)' : 'var(--brand)') : 'var(--muted)', outline: i === stepIdx ? '1.5px solid currentColor' : 'none' }}>${s === 'Paid' ? 'Paid ₹' + fee() : s}</span>`)}
+      ${stepIdx < 0 && badge(l.stage)}
+    </div>
+
+    <div className="seg" style=${{ marginBottom: 12 }}>${tabs.map(([k, t]) => html`<button key=${k} className=${panel === k ? 'on' : ''} onClick=${() => setPanel(k)}>${t}</button>`)}</div>
+    ${panel === 'call' && html`<div className="card pad" style=${{ marginBottom: 16 }}>
+      <div className="chips" role="radiogroup" aria-label="Call outcome">${CALL_OUTCOMES.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${out === o} className=${'chip' + (out === o ? ' on' : '')} onClick=${() => setOut(o)}>${o}</button>`)}</div>
+      <div className="form two" style=${{ marginTop: 12 }}>
+        <${Field} label="Remarks" full><textarea className="input" rows="2" value=${remarks} onInput=${e => setRemarks(e.target.value)} placeholder="What did they say?"/><//>
+        ${!closing && html`<${Field} label="Next follow-up"><div className="row" style=${{ flexWrap: 'nowrap' }}><input className="input" type="date" value=${next} onInput=${e => setNext(e.target.value)}/>
+          <button type="button" className="btn sm" onClick=${() => setNext(todayStr())}>Today</button><button type="button" className="btn sm" onClick=${() => setNext(addDays(todayStr(), 2))}>+2d</button></div><//>`}
+      </div>
+      <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${logCall}>${busy ? 'Saving…' : nextId ? 'Save & next lead' : 'Save call'}</button>
+      ${l.no_answer_count > 0 && !PAID_STAGES.includes(l.stage) && html`<span className="small muted" style=${{ marginLeft: 10 }}>${l.no_answer_count} unanswered in a row${l.no_answer_count >= 2 ? ' — one more moves it to Not reachable' : ''}</span>`}
+    </div>`}
+    ${panel === 'pay' && html`<div className="card pad" style=${{ marginBottom: 16 }}><div className="form two">
+      <${Field} label="Amount (₹)"><input className="input" type="number" min="1" value=${pay.amount} onInput=${e => setPay({ ...pay, amount: e.target.value })}/><//>
+      <${Field} label="Paid on"><input className="input" type="date" max=${todayStr()} value=${pay.date} onInput=${e => setPay({ ...pay, date: e.target.value })}/><//>
+      <${Field} label="Transaction / UTR ID *"><input className="input" value=${pay.ref} onInput=${e => setPay({ ...pay, ref: e.target.value })} placeholder="From the payment screenshot"/><//>
+      <${Field} label="Mode"><${Select} value=${pay.mode} onChange=${v => setPay({ ...pay, mode: v })} options=${PAY_MODES}/><//></div>
+      <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${markPaid}>${busy ? 'Saving…' : 'Mark as paid'}</button></div>`}
+    ${panel === 'idea' && html`<div className="card pad" style=${{ marginBottom: 16 }}><div className="form two">
+      <${Field} label="Idea title" full><input className="input" value=${idea.title} onInput=${e => setIdea({ ...idea, title: e.target.value })} placeholder="e.g. Campus snack delivery app"/><//>
+      <${Field} label="Link (Drive / form response)"><input className="input" type="url" value=${idea.link} onInput=${e => setIdea({ ...idea, link: e.target.value })}/><//>
+      <${Field} label="Submitted on"><input className="input" type="date" max=${todayStr()} value=${idea.date} onInput=${e => setIdea({ ...idea, date: e.target.value })}/><//></div>
+      <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${markIdea}>${busy ? 'Saving…' : 'Mark idea submitted'}</button></div>`}
+
+    ${isMgr && html`<div className="form two" style=${{ marginBottom: 16 }}>
+      <${Field} label="Telecaller"><${Select} value=${l.telecaller_id || ''} onChange=${reassign} options=${callers(team).map(t => ({ value: t.id, label: t.name }))} blank="Unassigned"/><//>
+      <${Field} label="Change stage (corrections)"><${Select} value=${l.stage} onChange=${setStage} options=${LEAD_STAGES}/><//></div>`}
+
+    <h3 style=${{ marginBottom: 10 }}>History</h3>
+    ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type}${h.outcome ? ' · ' + h.outcome : ''}</b>
+      <div className="small muted">${fDateTime(h.created_at)} · ${nameOf(h.by_user)}${h.next_follow_up ? ' · next ' + fShort(h.next_follow_up) : ''}</div>${h.remarks && html`<div className="small">${h.remarks}</div>`}</div>`)}</div>` : html`<p className="muted small">No activity yet. Make the first call.</p>`}
+    <h3 style=${{ margin: '20px 0 10px' }}>Details</h3>
+    <div className="card list">${info.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 110, flex: 'none' }}>${k}</span><span style=${{ wordBreak: 'break-word' }}>${v || '—'}</span></div>`)}</div>
+    <div className="row" style=${{ marginTop: 14 }}><button className="btn" onClick=${() => editLead(l)}>Edit details</button>${me.role === 'admin' && html`<button className="btn danger" onClick=${del}>Delete lead</button>`}</div>
+  <//>`;
+}
+
+/* ---------- Bulk upload leads (Meta CSV, preliminary sheets, any Excel) ---------- */
+function LeadBulkUpload({ me, team, onClose, onDone }) {
+  const [rows, setRows] = useState(null); const [fileName, setFileName] = useState(''); const [defSource, setDefSource] = useState('Meta Ads');
+  const [campaign, setCampaign] = useState(''); const [prog, setProg] = useState(null); const [res, setRes] = useState(null); const [err, setErr] = useState(null);
+  const get = (r, ...k) => { for (const c of Object.keys(r)) if (k.includes(c.trim().toLowerCase().replace(/[_?]/g, ' ').replace(/\s+/g, ' ').trim())) return String(r[c] ?? '').trim(); return ''; };
+  const template = () => exportExcel('Young CEO leads template', { Leads: [{ Name: 'Aysha Fathima', Phone: '9847000000', WhatsApp: '', Email: '', Grade: 'Grade 11', School: 'Ideal Higher Secondary School', District: 'Kozhikode', City: 'Kuttiady', 'Parent name': '', Source: 'Preliminary programme', Campaign: 'Ideal HSS session', 'Telecaller email': '', Remarks: '' }] });
+  const read = async e => {
+    const f = e.target.files[0]; if (!f) return; setErr(null); setRes(null);
+    try {
+      const wb = XLSX.read(await f.arrayBuffer());
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' }).filter(r => Object.values(r).some(v => String(v).trim()));
+      if (!data.length) return setErr('The first sheet has no rows.');
+      if (data.length > 5000) return setErr('Upload up to 5,000 leads at a time — split the file.');
+      setRows(data); setFileName(f.name);
+      if (/meta|facebook|lead/i.test(f.name)) setDefSource('Meta Ads');
+    } catch { setErr('Could not read this file. Use .xlsx, .xls or .csv.'); }
+    e.target.value = '';
+  };
+  const nameOfRow = r => get(r, 'name', 'full name', 'student name', 'student', 'participant name');
+  const phoneOfRow = r => get(r, 'phone', 'phone number', 'mobile', 'mobile number', 'contact', 'contact number', 'whatsapp number').replace(/^p:/i, '');
+  const run = async () => {
+    let added = 0; const skipped = []; const seen = new Set();
+    for (let i = 0; i < rows.length; i++) {
+      setProg({ done: i, total: rows.length });
+      const r = rows[i], row = i + 2, name = nameOfRow(r), phone = phoneOfRow(r), digits = phone.replace(/\D/g, '').slice(-10);
+      if (!name || digits.length < 8) { skipped.push({ row, name: name || '(blank)', why: 'Name and a valid phone are required' }); continue; }
+      if (seen.has(digits)) { skipped.push({ row, name, why: 'Same phone repeated in this file' }); continue; }
+      seen.add(digits);
+      const tcTxt = get(r, 'telecaller email', 'telecaller').toLowerCase();
+      const tc = tcTxt ? callers(team).find(t => t.email.toLowerCase() === tcTxt || t.name.toLowerCase() === tcTxt)?.id : null;
+      const src = get(r, 'source', 'lead source');
+      const row_ = { name, phone, whatsapp: get(r, 'whatsapp') || null, email: get(r, 'email', 'email address') || null,
+        category: get(r, 'grade', 'class', 'category', 'which class are you studying in') || null,
+        school_name: get(r, 'school', 'school name', 'college', 'school / college', 'institution') || null,
+        district: get(r, 'district') || null, city: get(r, 'city', 'town', 'place') || null, parent_name: get(r, 'parent name', 'parent', 'guardian') || null,
+        source: LEAD_SOURCES.includes(src) ? src : defSource, campaign: campaign || get(r, 'campaign', 'campaign name', 'ad name', 'form name', 'programme') || null,
+        remarks: get(r, 'remarks', 'notes') || null };
+      if (tc) row_.telecaller_id = tc;
+      const { error } = await db.from('leads').insert(row_);
+      if (error) skipped.push({ row, name, why: nice(error) }); else added++;
+    }
+    setProg(null); setRes({ added, skipped }); onDone();
+  };
+  const busy = !!prog;
+  return html`<${Modal} title="Bulk upload leads" sub="Meta Ads CSV export, preliminary programme sheets or any Excel. Same phone = skipped." onClose=${busy ? () => {} : onClose}>
+    <ol className="small soft" style=${{ paddingLeft: 18, margin: '0 0 14px' }}>
+      <li><b>Meta Ads:</b> Ads Manager → Lead forms → Download leads (CSV) and upload as it is — columns like full_name and phone_number are read automatically.</li>
+      <li><b>Preliminary programme / other lists:</b> use the template. <b>Name and Phone</b> are required.</li>
+      <li>Leads without a telecaller are shared out <b>in turn</b> automatically.</li>
+    </ol>
+    <div className="form two" style=${{ marginBottom: 12 }}>
+      <${Field} label="Source for rows without one"><${Select} value=${defSource} onChange=${setDefSource} options=${LEAD_SOURCES}/><//>
+      <${Field} label="Campaign / programme name (optional)"><input className="input" value=${campaign} onInput=${e => setCampaign(e.target.value)} placeholder="e.g. Ideal HSS preliminary, 20 Nov"/><//>
+    </div>
+    <div className="row" style=${{ marginBottom: 12 }}><button className="btn" onClick=${template} disabled=${busy}>Download template</button>
+      <label className="btn primary" style=${{ opacity: busy ? .55 : 1 }}>${rows ? 'Choose another file' : 'Choose file'}<input type="file" accept=".xlsx,.xls,.csv" hidden disabled=${busy} onChange=${read}/></label></div>
+    ${err && html`<div className="msg bad">${err}</div>`}
+    ${rows && !res && html`<div className="card pad"><b>${fileName}</b> — ${rows.length} row${rows.length === 1 ? '' : 's'}
+      <div className="scroll" style=${{ marginTop: 10, maxHeight: 220 }}><table><thead><tr><th>#</th><th>Name</th><th>Phone</th><th>School</th></tr></thead>
+        <tbody>${rows.slice(0, 8).map((r, i) => html`<tr key=${i}><td>${i + 2}</td><td>${nameOfRow(r) || html`<span className="bad">missing</span>`}</td><td>${phoneOfRow(r) || html`<span className="bad">missing</span>`}</td><td>${get(r, 'school', 'school name', 'college') || '—'}</td></tr>`)}</tbody></table></div>
+      ${rows.length > 8 && html`<p className="small muted" style=${{ margin: '6px 0 0' }}>…and ${rows.length - 8} more</p>`}
+      <div style=${{ marginTop: 12 }}><button className="btn gold" disabled=${busy} onClick=${run}>${busy ? `Uploading ${prog.done + 1} of ${prog.total}…` : `Upload ${rows.length} leads`}</button></div>
+      ${busy && html`<div className="stat" style=${{ padding: 0, border: 0, marginTop: 10, cursor: 'default' }}><div className="bar"><i style=${{ width: Math.round(prog.done / prog.total * 100) + '%' }}/></div></div>`}</div>`}
+    ${res && html`<div className="msg ok"><b>${res.added} lead${res.added === 1 ? '' : 's'} added</b> and shared with telecallers. ${res.skipped.length} skipped.</div>
+      ${res.skipped.length > 0 && html`<div className="scroll" style=${{ marginTop: 10, maxHeight: 280 }}><table><thead><tr><th>Row</th><th>Name</th><th>Why skipped</th></tr></thead>
+        <tbody>${res.skipped.map((x, i) => html`<tr key=${i}><td>${x.row}</td><td>${x.name}</td><td className="soft">${x.why}</td></tr>`)}</tbody></table></div>
+        <button className="btn sm" style=${{ marginTop: 10 }} onClick=${() => exportExcel('Skipped leads', { Skipped: res.skipped.map(x => ({ Row: x.row, Name: x.name, Reason: x.why })) })}>Download this list</button>`}
+      <div className="row" style=${{ marginTop: 14 }}><button className="btn primary" onClick=${onClose}>Done</button><button className="btn" onClick=${() => { setRows(null); setRes(null); }}>Upload another file</button></div>`}
+  <//>`;
+}
+
+/* ---------- Lead reports ---------- */
+const LEAD_REPORTS = [
+  ['all', 'All leads', 'Every lead with stage, telecaller, payment and idea details'],
+  ['callers', 'Telecaller performance', 'Leads, calls, contacted, paid and conversion per telecaller'],
+  ['payments', 'Payments', 'Every ₹' + (window.CRM_CONFIG.REG_FEE || 299) + ' registration with transaction ID — for accounts'],
+  ['sources', 'Sources & campaigns', 'Which sources and campaigns bring paid participants'],
+  ['due', 'Follow-ups due', 'Open leads due today or overdue, oldest first'],
+];
+async function buildLeadReport(key, team, range) {
+  const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
+  const inRange = iso => (!range.from || istDate(iso) >= range.from) && (!range.to || istDate(iso) <= range.to);
+  const L = (await fetchAll(() => db.from('leads').select('*').order('created_at', { ascending: false }))).filter(l => inRange(l.created_at));
+  if (key === 'all') return { Leads: L.map(l => ({ 'Lead ID': l.code, Name: l.name, Phone: l.phone, WhatsApp: l.whatsapp, Email: l.email, Grade: l.category, School: l.school_name,
+    District: l.district, City: l.city, Parent: l.parent_name, Source: l.source, Campaign: l.campaign, Stage: l.stage, Telecaller: nameOf(l.telecaller_id),
+    'Last contact': l.last_contact, 'Next follow-up': l.next_follow_up, 'Paid on': l.paid_at, Amount: l.amount ? +l.amount : null, 'Payment ref': l.payment_ref,
+    'Payment mode': l.payment_mode, Idea: l.idea_title, 'Idea link': l.idea_link, 'Idea date': l.idea_at, Added: istDate(l.created_at), Remarks: l.remarks })) };
+  if (key === 'payments') { const P = L.filter(l => l.paid_at).sort((a, b) => b.paid_at.localeCompare(a.paid_at));
+    const rows = P.map(l => ({ 'Paid on': l.paid_at, 'Lead ID': l.code, Name: l.name, Phone: l.phone, School: l.school_name, Amount: +l.amount || 0, Mode: l.payment_mode, 'Transaction ID': l.payment_ref, Telecaller: nameOf(l.telecaller_id), Stage: l.stage }));
+    if (rows.length) rows.push({ 'Paid on': 'TOTAL', Name: `${rows.length} payments`, Amount: rows.reduce((a, r) => a + r.Amount, 0) });
+    return { Payments: rows }; }
+  if (key === 'due') { const t = todayStr(); return { 'Follow-ups due': L.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= t).sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up))
+    .map(l => ({ 'Lead ID': l.code, Name: l.name, Phone: l.phone, Stage: l.stage, Telecaller: nameOf(l.telecaller_id), 'Last contact': l.last_contact, Due: l.next_follow_up, 'Days overdue': Math.round((Date.parse(t) - Date.parse(l.next_follow_up)) / 864e5) })) }; }
+  if (key === 'sources') { const g = (k) => Object.entries(L.reduce((m, l) => { const x = l[k] || '(none)'; (m[x] ||= []).push(l); return m; }, {}))
+      .map(([x, v]) => { const p = v.filter(l => PAID_STAGES.includes(l.stage)); return { [k === 'source' ? 'Source' : 'Campaign']: x, Leads: v.length, Contacted: v.filter(l => l.stage !== 'New').length, Paid: p.length, 'Conversion %': Math.round(p.length / v.length * 100), Revenue: p.reduce((a, l) => a + (+l.amount || 0), 0), 'Ideas submitted': v.filter(l => ['Idea submitted','Shortlisted'].includes(l.stage)).length }; }).sort((a, b) => b.Leads - a.Leads);
+    return { Sources: g('source'), Campaigns: g('campaign') }; }
+  let A = await fetchAll(() => db.from('lead_activities').select('by_user,type,outcome,created_at'));
+  A = A.filter(a => inRange(a.created_at));
+  return { 'Telecaller performance': callers(team).concat(team.filter(t => t.role === 'telecaller' && !t.active)).map(t => { const mine = L.filter(l => l.telecaller_id === t.id), a = A.filter(x => x.by_user === t.id), p = mine.filter(l => PAID_STAGES.includes(l.stage));
+    return { Telecaller: t.name + (t.active ? '' : ' (removed)'), 'Leads assigned': mine.length, Calls: a.filter(x => x.type === 'Call').length,
+      'Calls connected': a.filter(x => x.type === 'Call' && ['Connected','Interested','Call back later','Not interested'].includes(x.outcome)).length,
+      'WhatsApp sent': a.filter(x => x.type === 'WhatsApp').length, 'Not called yet': mine.filter(l => l.stage === 'New').length,
+      Paid: p.length, 'Conversion %': mine.length ? Math.round(p.length / mine.length * 100) : 0, Revenue: p.reduce((s, l) => s + (+l.amount || 0), 0),
+      'Ideas submitted': mine.filter(l => ['Idea submitted','Shortlisted'].includes(l.stage)).length }; }) };
+}
+function LeadReports({ me, team, toast }) {
+  const [key, setKey] = useState(me.role === 'telecaller' ? 'due' : 'callers'); const [data, setData] = useState(null); const [sheet, setSheet] = useState(0);
+  const [from, setFrom] = useState(''); const [to, setTo] = useState('');
+  useEffect(() => { setData(null); setSheet(0); buildLeadReport(key, team, { from, to }).then(setData).catch(e => toast(nice(e))); }, [key, from, to]);
+  const names = data ? Object.keys(data) : []; const rows = data ? data[names[sheet]] || [] : []; const cols = rows[0] ? Object.keys(rows[0]) : [];
+  const info = LEAD_REPORTS.find(r => r[0] === key);
+  const list = me.role === 'telecaller' ? LEAD_REPORTS.filter(r => ['all', 'due', 'payments'].includes(r[0])) : LEAD_REPORTS;
+  return html`
+    <div className="head"><div><h1>Lead reports</h1><p>${me.role === 'telecaller' ? 'Your own leads.' : 'All Young CEO leads.'}</p></div>
+      <button className="btn primary" disabled=${!data} onClick=${() => exportExcel('Young CEO ' + info[1], data)}>Download Excel</button></div>
+    <div className="chips" style=${{ marginBottom: 12 }}>${list.map(r => html`<button key=${r[0]} className=${'chip' + (key === r[0] ? ' on' : '')} onClick=${() => setKey(r[0])}>${r[1]}</button>`)}</div>
+    <div className="row" style=${{ marginBottom: 10 }}><span className="soft small">${info[2]}.</span><span className="grow"/>
+      <label className="small row">Leads added from <input className="input" type="date" value=${from} onInput=${e => setFrom(e.target.value)} style=${{ width: 'auto', padding: '6px 8px' }}/></label>
+      <label className="small row">to <input className="input" type="date" value=${to} onInput=${e => setTo(e.target.value)} style=${{ width: 'auto', padding: '6px 8px' }}/></label>
+      ${(from || to) && html`<button className="btn sm" onClick=${() => { setFrom(''); setTo(''); }}>All time</button>`}</div>
+    ${names.length > 1 && html`<div className="seg" style=${{ marginBottom: 10 }}>${names.map((n, i) => html`<button key=${n} className=${sheet === i ? 'on' : ''} onClick=${() => setSheet(i)}>${n}</button>`)}</div>`}
+    <div className="card scroll">${!data ? html`<p className="pad muted">Loading…</p>` : !rows.length ? html`<p className="pad muted">No records yet.</p>` : html`
+      <table><thead><tr>${cols.map(c => html`<th key=${c}>${c}</th>`)}</tr></thead><tbody>${rows.slice(0, 200).map((r, i) => html`<tr key=${i}>${cols.map(c => html`<td key=${c} className=${typeof r[c] === 'number' ? 'r' : ''} style=${{ whiteSpace: 'nowrap', fontWeight: r['Paid on'] === 'TOTAL' ? 700 : 400 }}>${r[c] ?? ''}</td>`)}</tr>`)}</tbody></table>
+      ${rows.length > 200 && html`<p className="pad small muted">Showing 200 of ${rows.length}. Download Excel for all rows.</p>`}`}</div>`;
+}
+
+/* ---------- Connect Meta Lead Ads / website (admin) ---------- */
+function Connect({ toast }) {
+  const [key, setKey] = useState(null); const [show, setShow] = useState(false); const [test, setTest] = useState(null);
+  useEffect(() => { db.rpc('admin_get_intake_key').then(({ data, error }) => error ? toast(nice(error)) : setKey(data)); }, []);
+  const url = `${C.SUPABASE_URL}/rest/v1/rpc/capture_lead`;
+  const body = k => JSON.stringify({ p_key: k, p_name: '{{Full name}}', p_phone: '{{Phone number}}', p_email: '{{Email}}', p_category: '{{Class}}', p_school: '{{School}}', p_district: '{{District}}', p_source: 'Meta Ads', p_campaign: '{{Campaign name}}' }, null, 2);
+  const copy = (t, m) => { navigator.clipboard?.writeText(t); toast(m || 'Copied'); };
+  const regen = async () => { if (!confirm('Make a new intake key? Make/Zapier and the website form will stop sending leads until you update them with the new key.')) return;
+    const { data, error } = await db.rpc('admin_new_intake_key'); if (error) toast(nice(error)); else { setKey(data); toast('New key created'); } };
+  const sendTest = async () => { const { data, error } = await db.rpc('capture_lead', { p_key: key, p_name: 'Test lead – delete me', p_phone: '9000000001', p_source: 'Website', p_campaign: 'Connection test' });
+    setTest(error ? '❌ ' + nice(error) : data.status === 'created' ? '✅ Working — a test lead was created. Delete it from Leads.' : '✅ Working — the test lead already exists.'); };
+  const snippet = `<!-- Young CEO registration form: paste into aimeryoungceo.com -->
+<form id="yceo-form">
+  <input name="name" placeholder="Student name" required>
+  <input name="phone" type="tel" placeholder="Phone / WhatsApp" required>
+  <input name="email" type="email" placeholder="Email">
+  <select name="category" required><option value="">Class</option>
+    <option>Grade 9</option><option>Grade 10</option><option>Grade 11</option><option>Grade 12</option><option>UG final year</option></select>
+  <input name="school" placeholder="School / college">
+  <input name="district" placeholder="District">
+  <button type="submit">Register</button>
+  <p id="yceo-msg"></p>
+</form>
+<\x73cript>
+document.getElementById('yceo-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target), m = document.getElementById('yceo-msg');
+  const p = new URLSearchParams(location.search);
+  const res = await fetch('${url}', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': '${C.SUPABASE_KEY}' },
+    body: JSON.stringify({ p_key: '${show && key ? key : 'YOUR-INTAKE-KEY'}', p_name: f.get('name'), p_phone: f.get('phone'),
+      p_email: f.get('email'), p_category: f.get('category'), p_school: f.get('school'), p_district: f.get('district'),
+      p_source: 'Website', p_campaign: p.get('utm_campaign') || p.get('utm_source') || null })
+  });
+  m.textContent = res.ok ? 'Thank you! Our team will call you shortly.' : 'Something went wrong. Please try again.';
+  if (res.ok) e.target.reset();
+});
+<\/script>`;
+  const Code = ({ text, label }) => html`<div style=${{ position: 'relative', marginTop: 6 }}><pre style=${{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 10, padding: 12, fontSize: 12.5, overflowX: 'auto', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>${text}</pre>
+    <button className="btn sm" style=${{ position: 'absolute', top: 6, right: 6 }} onClick=${() => copy(text, label + ' copied')}>Copy</button></div>`;
+  return html`
+    <div className="head"><div><h1>Connect lead sources</h1><p>Send Meta Lead Ads and website registrations straight into the CRM. Leads are assigned to telecallers in turn.</p></div></div>
+    <div className="card pad" style=${{ marginBottom: 16 }}>
+      <h2>Your intake details</h2>
+      <p className="small soft">Use these in Make, Zapier or n8n, and in the website form. Keep the intake key private — anyone with it can add leads.</p>
+      <div className="form" style=${{ marginTop: 10 }}>
+        <${Field} label="URL (method: POST)"><${Code} text=${url} label="URL"/><//>
+        <${Field} label="Headers"><${Code} text=${'apikey: ' + C.SUPABASE_KEY + '\nContent-Type: application/json'} label="Headers"/><//>
+        <${Field} label="Intake key"><div className="row"><code style=${{ background: 'var(--paper)', padding: '8px 10px', borderRadius: 8, fontSize: 13 }}>${key ? (show ? key : '••••••••••••' + key.slice(-4)) : 'Loading…'}</code>
+          <button className="btn sm" onClick=${() => setShow(!show)}>${show ? 'Hide' : 'Show'}</button><button className="btn sm" onClick=${() => copy(key, 'Intake key copied')}>Copy</button><button className="btn sm danger" onClick=${regen}>Make new key</button></div><//>
+      </div>
+      <div className="row" style=${{ marginTop: 14 }}><button className="btn primary" disabled=${!key} onClick=${sendTest}>Send a test lead</button>${test && html`<span className="small">${test}</span>`}</div>
+    </div>
+
+    <div className="card pad" style=${{ marginBottom: 16 }}>
+      <h2>Meta Lead Ads → CRM (automatic)</h2>
+      <p className="small soft">Each new lead from your Facebook / Instagram lead form appears here within a minute. Set up once in Make.com (free plan is enough to start) — Zapier and n8n work the same way.</p>
+      <ol className="small" style=${{ paddingLeft: 18, lineHeight: 1.7 }}>
+        <li>Make.com → <b>Create a new scenario</b>.</li>
+        <li>First module: <b>Facebook Lead Ads → Watch New Leads</b>. Connect the AIMER Facebook page and choose the Young CEO lead form.</li>
+        <li>Second module: <b>HTTP → Make a request</b>. URL = the URL above, Method = <b>POST</b>.</li>
+        <li>Add the two <b>headers</b> above (apikey and Content-Type).</li>
+        <li>Body type: <b>Raw</b>, Content type: <b>JSON</b>. Paste the body below, then replace each <code>{{…}}</code> with the matching field from the Facebook module, and put your intake key in <code>p_key</code>.</li>
+        <li>Click <b>Run once</b>, submit a test lead on your form (Meta's Lead Ads Testing Tool), check it appears in Leads, then switch the scenario <b>ON</b>.</li>
+      </ol>
+      <${Field} label="Request body (JSON)"><${Code} text=${body(show && key ? key : 'YOUR-INTAKE-KEY')} label="Body"/><//>
+      <p className="small muted" style=${{ marginTop: 8 }}>Only p_key, p_name and p_phone are required. Same phone number twice = no duplicate; it's noted on the existing lead.</p>
+    </div>
+
+    <div className="card pad">
+      <h2>Website form → CRM (aimeryoungceo.com)</h2>
+      <p className="small soft">Give this to whoever edits the website. Press <b>Show</b> on the intake key first so it's filled in. Ad tracking (utm_campaign) is captured automatically.</p>
+      <${Code} text=${snippet} label="Form code"/>
+    </div>`;
 }
 
 /* ====================================================================
@@ -861,6 +1400,7 @@ function App() {
   const [session, setSession] = useState(undefined); const [recovery, setRecovery] = useState(false);
   const [me, setMe] = useState(null); const [team, setTeam] = useState([]);
   const [tab, setTab] = useState('dashboard'); const [params, setParams] = useState({});
+  const [mode, setModeState] = useState(() => { try { return localStorage.getItem('yceo-mode') || 'outreach'; } catch { return 'outreach'; } });
   const [modal, setModal] = useState(null); const [stack, setStack] = useState([]);
   const [toastMsg, setToastMsg] = useState(null); const [refreshKey, setRefresh] = useState(0);
   const toast = m => { setToastMsg(m); setTimeout(() => setToastMsg(null), 2600); };
@@ -883,30 +1423,50 @@ function App() {
   const editSchool = s => open({ k: 'schoolForm', s });
   const newProgramme = school => open({ k: 'progForm', school });
   const editProgramme = p => open({ k: 'progForm', p });
+  const openLead = (id, queue) => { if (modal?.k === 'lead') setModal({ k: 'lead', id, queue }); else open({ k: 'lead', id, queue }); };
+  const editLead = l => open({ k: 'leadForm', l });
 
   if (session === undefined) return html`<p className="wrap muted">Loading…</p>`;
   if (!session || recovery) return html`<${Login} recovery=${recovery} onDone=${() => { setRecovery(false); toast('Password updated'); }}/>`;
   if (!me) return html`<p className="wrap muted">Loading…</p>`;
   if (me.missing || !me.active) return html`<div className="login"><div className="card pad"><h2>No access</h2><p className="soft">Your account isn’t active in the CRM. Ask the admin to activate you.</p><button className="btn" onClick=${() => db.auth.signOut()}>Sign out</button></div></div>`;
 
-  const tabs = [['dashboard', 'Dashboard', I.home], ['schools', 'Schools', I.school], ['programmes', 'Programmes', I.cal], ['reports', 'Reports', I.chart], ...(me.role === 'admin' ? [['team', 'Team', I.team]] : [])];
-  const P = { me, team, toast, bump, refreshKey, openSchool, openProgramme, editSchool, newProgramme };
+  const canOutreach = me.role !== 'telecaller', canLeads = me.role !== 'officer', both = canOutreach && canLeads;
+  const m = !canLeads ? 'outreach' : !canOutreach ? 'leads' : mode;
+  const setMode = x => { try { localStorage.setItem('yceo-mode', x); } catch {} setModeState(x); go(x === 'leads' ? 'ldash' : 'dashboard'); };
+  const admin = me.role === 'admin' ? [['team', 'Team', I.team]] : [];
+  const tabs = m === 'leads'
+    ? [['ldash', 'Dashboard', I.home], ['leads', 'Leads', I.lead], ['lreports', 'Reports', I.chart], ...admin, ...(me.role === 'admin' ? [['connect', 'Connect', I.plug]] : [])]
+    : [['dashboard', 'Dashboard', I.home], ['schools', 'Schools', I.school], ['programmes', 'Programmes', I.cal], ['reports', 'Reports', I.chart], ...admin];
+  const cur = tabs.some(x => x[0] === tab) ? tab : tabs[0][0];
+  const P = { me, team, toast, bump, refreshKey, openSchool, openProgramme, editSchool, newProgramme, openLead, editLead };
+  const ModeSwitch = () => html`<div className="mode" role="tablist" aria-label="Choose CRM">
+    <button role="tab" aria-selected=${m === 'outreach'} className=${m === 'outreach' ? 'on' : ''} onClick=${() => setMode('outreach')}>School Outreach</button>
+    <button role="tab" aria-selected=${m === 'leads'} className=${m === 'leads' ? 'on' : ''} onClick=${() => setMode('leads')}>Young CEO Leads</button></div>`;
   return html`
     <header className="top"><div className="in"><${Logo}/>
-      <nav className="tabs">${tabs.map(([k, l]) => html`<button key=${k} className=${'tab' + (tab === k ? ' on' : '')} onClick=${() => go(k)}>${l}</button>`)}</nav>
+      ${both && html`<div className="mode-desk"><${ModeSwitch}/></div>`}
+      <nav className="tabs">${tabs.map(([k, l]) => html`<button key=${k} className=${'tab' + (cur === k ? ' on' : '')} onClick=${() => go(k)}>${l}</button>`)}</nav>
       <div className="who"><b>${me.name}</b><button className="small" style=${{ border: 0, background: 'none', color: 'var(--muted)', padding: 0, cursor: 'pointer' }} onClick=${() => db.auth.signOut()}>Sign out</button></div></div></header>
-    <main className="wrap" key=${tab + JSON.stringify(params)}>
-      ${tab === 'dashboard' && html`<${Dashboard} ...${P} go=${go} key=${refreshKey}/>`}
-      ${tab === 'schools' && html`<${Schools} ...${P} params=${params}/>`}
-      ${tab === 'programmes' && html`<${Programmes} ...${P} params=${params}/>`}
-      ${tab === 'reports' && html`<${Reports} ...${P}/>`}
-      ${tab === 'team' && html`<${Team} me=${me} team=${team} reloadTeam=${reloadTeam} toast=${toast}/>`}
+    ${both && html`<div className="mode-mob"><${ModeSwitch}/></div>`}
+    <main className="wrap" key=${m + cur + JSON.stringify(params)}>
+      ${cur === 'dashboard' && html`<${Dashboard} ...${P} go=${go} key=${refreshKey}/>`}
+      ${cur === 'schools' && html`<${Schools} ...${P} params=${params}/>`}
+      ${cur === 'programmes' && html`<${Programmes} ...${P} params=${params}/>`}
+      ${cur === 'reports' && html`<${Reports} ...${P}/>`}
+      ${cur === 'ldash' && html`<${LeadDashboard} ...${P} go=${go}/>`}
+      ${cur === 'leads' && html`<${Leads} ...${P} params=${params}/>`}
+      ${cur === 'lreports' && html`<${LeadReports} ...${P}/>`}
+      ${cur === 'connect' && html`<${Connect} toast=${toast}/>`}
+      ${cur === 'team' && html`<${Team} me=${me} team=${team} reloadTeam=${reloadTeam} toast=${toast}/>`}
     </main>
-    <nav className="bottom">${tabs.map(([k, l, ic]) => html`<button key=${k} className=${tab === k ? 'on' : ''} onClick=${() => go(k)}>${ic}${l}</button>`)}</nav>
+    <nav className="bottom">${tabs.map(([k, l, ic]) => html`<button key=${k} className=${cur === k ? 'on' : ''} onClick=${() => go(k)}>${ic}${l}</button>`)}</nav>
     ${modal?.k === 'school' && html`<${SchoolDetail} key=${modal.id} ...${P} id=${modal.id} onClose=${close} scheduleFor=${s => newProgramme(s)}/>`}
     ${modal?.k === 'schoolForm' && html`<${SchoolForm} ...${P} school=${modal.s} onClose=${close} onSaved=${id => { toast('School saved'); bump(); setStack([]); setModal({ k: 'school', id }); }}/>`}
     ${modal?.k === 'prog' && html`<${ProgrammeDetail} key=${modal.id} ...${P} id=${modal.id} onClose=${close} editProgramme=${editProgramme}/>`}
     ${modal?.k === 'progForm' && html`<${ProgrammeForm} ...${P} school=${modal.school} programme=${modal.p} onClose=${close} onSaved=${id => { toast('Programme saved'); bump(); setStack([]); setModal({ k: 'prog', id }); }}/>`}
+    ${modal?.k === 'lead' && html`<${LeadDetail} ...${P} id=${modal.id} queue=${modal.queue} onClose=${close}/>`}
+    ${modal?.k === 'leadForm' && html`<${LeadForm} ...${P} lead=${modal.l} onClose=${close} onSaved=${id => { toast('Lead saved'); bump(); setStack([]); setModal({ k: 'lead', id }); }}/>`}
     ${toastMsg && html`<div className="toast" role="status">${toastMsg}</div>`}`;
 }
 

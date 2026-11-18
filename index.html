@@ -539,8 +539,8 @@ function OutreachForm({ me, team, schoolId, status, onSaved }) {
     <div><button className="btn primary" disabled=${busy}>${busy ? 'Saving…' : 'Save outreach'}</button></div></form>`;
 }
 
-function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProgramme, toast, bump }) {
-  const [s, setS] = useState(null); const [hist, setHist] = useState([]); const [progs, setProgs] = useState([]);
+function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProgramme, openLead, toast, bump }) {
+  const [s, setS] = useState(null); const [hist, setHist] = useState([]); const [progs, setProgs] = useState([]); const [leads, setLeads] = useState(null);
   const load = async () => {
     const [a, b, c] = await Promise.all([
       db.from('schools').select('*').eq('id', id).single(),
@@ -549,6 +549,7 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
     ]);
     if (a.error) { toast('This school isn’t available to you.'); return onClose(); }
     setS(a.data); setHist(b.data || []); setProgs(c.data || []);
+    if (me.role !== 'officer') db.from('leads').select('id,code,name,stage,lead_type,category').eq('school_id', id).order('created_at', { ascending: false }).then(r => setLeads(r.error ? null : r.data || []));
   };
   useEffect(() => { load(); }, [id]);
   const del = async () => { if (!confirm('Delete this school and all its outreach and programmes? This cannot be undone.')) return;
@@ -570,6 +571,11 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
     <h3 style=${{ margin: '22px 0 10px' }}>Programmes</h3>
     ${progs.length ? html`<div className="card list">${progs.map(p => html`<div key=${p.id} className="item click" onClick=${() => openProgramme(p.id)}><div className="grow"><b>${fDate(p.date)}, ${fTime(p.start_time)}</b><div className="small muted">${p.code} · ${p.type} · ${p.actual ?? p.expected} students</div></div>${badge(p.status)}</div>`)}</div>`
       : html`<p className="muted small">No programme yet.</p>`}
+    ${leads && html`<h3 style=${{ margin: '22px 0 10px' }}>Young CEO leads from this school (${leads.length})</h3>
+      ${leads.length ? html`<p className="small soft" style=${{ margin: '0 0 8px' }}>${['Young CEO 2.0','Preliminary Programme'].map(t => `${leads.filter(x => x.lead_type === t).length} ${t === 'Preliminary Programme' ? 'preliminary' : 'Young CEO 2.0'}`).join(' · ')} · ${leads.filter(x => ['Paid','Idea submitted','Shortlisted'].includes(x.stage)).length} paid</p>
+        <div className="card list">${leads.slice(0, 10).map(x => html`<div key=${x.id} className="item click" onClick=${() => openLead && openLead(x.id)}><div className="grow"><b>${x.name}</b> <span className="small muted">${x.category || ''}</span></div>${typeTag(x.lead_type)}${badge(x.stage)}</div>`)}</div>
+        ${leads.length > 10 && html`<p className="small muted">…and ${leads.length - 10} more (see Young CEO Leads → filter by school)</p>`}`
+      : html`<p className="small muted">No leads linked yet. Leads whose school is picked from this list appear here.</p>`}`}
     <h3 style=${{ margin: '22px 0 10px' }}>History</h3>
     ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type} · ${h.outcome}</b><div className="small muted">${fDate(h.done_on)} · ${nameOf(h.officer_id)}${h.next_follow_up ? ' · next: ' + (h.next_action || 'follow-up') + ', ' + whenText(h.next_follow_up, h.next_action_time) : ''}</div><div className="small">${h.remarks}</div></div>`)}</div>` : html`<p className="muted small">No outreach logged yet.</p>`}
     <h3 style=${{ margin: '22px 0 10px' }}>Details</h3>
@@ -942,6 +948,39 @@ const LEAD_STAGES = ['New','Contacted','Interested','Payment pending','Paid','Id
 const PIPELINE = ['New','Contacted','Interested','Payment pending','Paid','Idea submitted','Shortlisted'];
 const NO_FOLLOW = ['Not interested','Wrong number','Idea submitted','Shortlisted'];
 const PAID_STAGES = ['Paid','Idea submitted','Shortlisted'];
+const LEAD_TYPES = ['Young CEO 2.0', 'Preliminary Programme'];
+const typeTag = t => html`<span className="badge" style=${t === 'Preliminary Programme'
+  ? { background: 'color-mix(in srgb,#7C3AED 12%,transparent)', color: '#7C3AED' } : { background: 'var(--brand-tint)', color: 'var(--brand)' }}>${t === 'Preliminary Programme' ? 'Preliminary' : 'Young CEO 2.0'}</span>`;
+// All CRM schools (name, city, district only) for pickers
+let SCHOOL_DIR = null;
+const schoolDir = (fresh) => { if (fresh || !SCHOOL_DIR) SCHOOL_DIR = db.rpc('school_directory').then(r => r.data || []).catch(() => []); return SCHOOL_DIR; };
+const norm = t => (t || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+// Type-ahead school box: pick a CRM school (fills city + district) or type a new one
+function SchoolBox({ value, schoolId, district, onPick }) {
+  const [dir, setDir] = useState([]); const [open, setOpen] = useState(false);
+  useEffect(() => { schoolDir(true).then(setDir); }, []);
+  const q = norm(value);
+  const list = q.length < 2 ? [] : dir.filter(s => norm(s.name).includes(q) || norm(s.code) === q).sort((a, b) => (b.district === district) - (a.district === district)).slice(0, 8);
+  const linked = schoolId && dir.find(s => s.id === schoolId);
+  return html`<div style=${{ position: 'relative' }}>
+    <input className="input" value=${value || ''} placeholder="Start typing — pick from your schools or type a new one" autoComplete="off"
+      onInput=${e => { onPick({ school_name: e.target.value, school_id: null }); setOpen(true); }} onFocus=${() => setOpen(true)} onBlur=${() => setTimeout(() => setOpen(false), 150)}/>
+    ${linked ? html`<p className="small ok" style=${{ margin: '4px 0 0' }}>✓ Linked to ${linked.code} in School Outreach</p>`
+      : value && value.length > 2 && !list.length ? html`<p className="small muted" style=${{ margin: '4px 0 0' }}>New school — saved as typed</p>` : ''}
+    ${open && list.length > 0 && html`<div className="card list" style=${{ position: 'absolute', zIndex: 6, left: 0, right: 0, marginTop: 4, maxHeight: 260, overflow: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,.12)' }}>
+      ${list.map(s => html`<div key=${s.id} className="item click small" onMouseDown=${() => { onPick({ school_name: s.name, school_id: s.id, city: s.city, district: s.district }); setOpen(false); }}>
+        <span className="grow"><b>${s.name}</b></span><span className="muted">${s.city}, ${s.district}</span></div>`)}</div>`}
+  </div>`;
+}
+// City box with suggestions from schools in the chosen district
+function CityBox({ value, district, onChange }) {
+  const [dir, setDir] = useState([]);
+  useEffect(() => { schoolDir().then(setDir); }, []);
+  const cities = [...new Set(dir.filter(s => !district || s.district === district).map(s => s.city).filter(Boolean))].sort();
+  const id = 'cities-' + (district || 'all').replace(/\W/g, '');
+  return html`<div><input className="input" list=${id} value=${value || ''} onInput=${e => onChange(e.target.value)} placeholder=${cities.length ? 'Pick or type' : ''} autoComplete="off"/>
+    <datalist id=${id}>${cities.map(c => html`<option key=${c} value=${c}/>`)}</datalist></div>`;
+}
 const LEAD_SOURCES = ['Meta Ads','Website','Preliminary programme','Referral','Walk-in / call','School outreach','Other'];
 const LEAD_CATS = ['Grade 9','Grade 10','Grade 11','Grade 12','UG final year','Other'];
 const CALL_OUTCOMES = ['Connected','Interested','Call back later','No answer','Busy','Switched off','Not interested','Wrong number'];
@@ -957,18 +996,22 @@ const waText = (n, text) => n ? wa(n) + '?text=' + encodeURIComponent(text) : nu
 /* ---------- Lead dashboard ---------- */
 function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
   const [d, setD] = useState(null);
+  const [ltype, setLtype] = useState(() => { try { return localStorage.getItem('yceo-ltype') || ''; } catch { return ''; } });
+  const pickType = t => { setLtype(t); try { localStorage.setItem('yceo-ltype', t); } catch {} };
   const isMgr = me.role !== 'telecaller';
   const load = async () => {
     const today = todayStr();
     const [leads, acts] = await Promise.all([
-      fetchAll(() => db.from('leads').select('id,name,phone,whatsapp,stage,source,campaign,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,created_at,paid_at,amount,idea_at,no_answer_count')),
+      fetchAll(() => db.from('leads').select('id,name,phone,whatsapp,stage,source,campaign,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,created_at,paid_at,amount,idea_at,no_answer_count,lead_type')),
       fetchAll(() => db.from('lead_activities').select('type,outcome,by_user,created_at').gte('created_at', today + 'T00:00:00+05:30')),
     ]);
     setD({ leads, acts, today });
   };
   useEffect(() => { load().catch(e => toast(nice(e))); }, [refreshKey]);
   if (!d) return html`<p className="muted">Loading…</p>`;
-  const { leads, acts, today } = d;
+  const { acts, today } = d;
+  const leads = ltype ? d.leads.filter(l => l.lead_type === ltype) : d.leads;
+  const typeCount = t => d.leads.filter(l => l.lead_type === t).length;
   const paid = leads.filter(l => PAID_STAGES.includes(l.stage));
   const due = leads.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= today)
     .sort((a, b) => (a.stage === 'New' ? 0 : 1) - (b.stage === 'New' ? 0 : 1) || byWhen(a, b));
@@ -1003,16 +1046,20 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
       <p>${isMgr ? `${conv}% of leads have paid · ${callsToday.length} call${callsToday.length === 1 ? '' : 's'} logged today` : `${myCalls} call${myCalls === 1 ? '' : 's'} today · ${due.length} lead${due.length === 1 ? '' : 's'} to call`}</p></div>
       <div className="row"><button className="btn gold" onClick=${() => go('leads', { add: true })}>+ Add lead</button>
         ${isMgr && html`<button className="btn" onClick=${() => go('leads', { bulk: true })}>Bulk upload</button>`}</div></div>
+    <div className="seg" style=${{ marginBottom: 14 }} role="tablist" aria-label="Lead type">
+      <button className=${!ltype ? 'on' : ''} onClick=${() => pickType('')}>All (${d.leads.length})</button>
+      ${LEAD_TYPES.map(t => html`<button key=${t} className=${ltype === t ? 'on' : ''} onClick=${() => pickType(t)}>${t === 'Preliminary Programme' ? 'Preliminary' : t} (${typeCount(t)})</button>`)}
+    </div>
     ${isMgr && unassigned > 0 && html`<div className="msg warn row" style=${{ justifyContent: 'space-between', marginBottom: 14 }}><span><b>${unassigned} lead${unassigned === 1 ? ' has' : 's have'} no telecaller.</b> ${callers(team).some(t => t.role === 'telecaller') ? 'Share them out in turn.' : 'Add a telecaller in the Team tab first.'}</span>
       ${callers(team).some(t => t.role === 'telecaller') && html`<button className="btn sm" onClick=${share}>Share them out</button>`}</div>`}
-    <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert ? ' alert' : '')} onClick=${() => go('leads', s.go)}><div className="num">${s.n}</div><p>${s.l}</p></button>`)}</div>
+    <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert ? ' alert' : '')} onClick=${() => go('leads', { ...s.go, ltype })}><div className="num">${s.n}</div><p>${s.l}</p></button>`)}</div>
 
     <div className="grid g2">
       <div className="card"><div className="item"><h2 className="grow">Call now</h2>
         ${due.length > 0 && html`<button className="btn sm primary" onClick=${() => openLead(queue[0], queue)}>Start calling (${due.length})</button>`}</div>
         <div className="list">${due.slice(0, 12).map(l => html`<div key=${l.id} className="item">
           <div className="grow click" onClick=${() => openLead(l.id, queue)}><div className="row" style=${{ gap: 6 }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
-            <div className="trunc small"><b>${l.next_action || 'Follow-up call'}</b> <span className="muted">· ${[l.category, l.source].filter(Boolean).join(' · ')}${isMgr ? ' · ' + (team.find(t => t.id === l.telecaller_id)?.name || 'Unassigned') : ''}</span></div></div>
+            <div className="trunc small"><b>${l.next_action || 'Follow-up call'}</b> <span className="muted">· ${[l.lead_type === 'Preliminary Programme' ? 'Preliminary' : '', l.category, l.school_name || l.source].filter(Boolean).join(' · ')}${isMgr ? ' · ' + (team.find(t => t.id === l.telecaller_id)?.name || 'Unassigned') : ''}</span></div></div>
           <span className=${'small ' + (l.next_follow_up < today ? 'bad' : 'warn')} style=${{ fontWeight: 700, textAlign: 'right' }}>${l.next_follow_up < today ? fShort(l.next_follow_up) : l.next_action_time ? fTime(l.next_action_time) : 'Today'}</span>
           <a className="icon" href=${tel(l.phone)} aria-label="Call">${I.phone}</a>
           <a className="icon ok" href=${wa(l.whatsapp || l.phone)} target="_blank" aria-label="WhatsApp">${I.wa}</a></div>`)}
@@ -1041,14 +1088,15 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
 function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }) {
   const isMgr = me.role !== 'telecaller';
   const [q, setQ] = useState(''); const [stage, setStage] = useState(params.stage || ''); const [source, setSource] = useState(params.source || '');
-  const [cat, setCat] = useState(''); const [owner, setOwner] = useState(''); const [follow, setFollow] = useState(params.follow || '');
+  const [cat, setCat] = useState(''); const [owner, setOwner] = useState(''); const [follow, setFollow] = useState(params.follow || ''); const [ltype, setLtype] = useState(params.ltype || '');
   const [page, setPage] = useState(0); const [rows, setRows] = useState(null); const [total, setTotal] = useState(0);
   const [sel, setSel] = useState([]); const [bulk, setBulk] = useState(false);
   useEffect(() => { if (params.add) editLead(null); if (params.bulk && isMgr) setBulk(true); }, []);
   useEffect(() => {
     let alive = true;
     const t = setTimeout(async () => {
-      let x = db.from('leads').select('id,code,name,phone,stage,source,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,last_contact,created_at', { count: 'exact' });
+      let x = db.from('leads').select('id,code,name,phone,stage,source,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,last_contact,created_at,lead_type', { count: 'exact' });
+      if (ltype) x = x.eq('lead_type', ltype);
       const s = clean(q); if (s) x = x.or(`name.ilike.%${s}%,phone.ilike.%${s}%,code.ilike.%${s}%,school_name.ilike.%${s}%,email.ilike.%${s}%`);
       if (stage) x = x.eq('stage', stage); if (source) x = x.eq('source', source); if (cat) x = x.eq('category', cat);
       if (owner === 'none') x = x.is('telecaller_id', null); else if (owner) x = x.eq('telecaller_id', owner);
@@ -1061,8 +1109,8 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
       if (alive) { setRows(data || []); setTotal(count || 0); setSel([]); }
     }, 250);
     return () => { alive = false; clearTimeout(t); };
-  }, [q, stage, source, cat, owner, follow, page, refreshKey]);
-  useEffect(() => setPage(0), [q, stage, source, cat, owner, follow]);
+  }, [q, stage, source, cat, owner, follow, ltype, page, refreshKey]);
+  useEffect(() => setPage(0), [q, stage, source, cat, owner, follow, ltype]);
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const assign = async to => { if (!sel.length) return;
@@ -1076,6 +1124,7 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
     ${bulk && html`<${LeadBulkUpload} me=${me} team=${team} onClose=${() => setBulk(false)} onDone=${bump}/>`}
     <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', marginBottom: 14 }}>
       <input className="input" placeholder="Search name, phone, ID, school…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
+      <${Select} value=${ltype} onChange=${setLtype} options=${LEAD_TYPES} blank="All lead types" aria-label="Lead type"/>
       <${Select} value=${stage} onChange=${setStage} options=${LEAD_STAGES} blank="All stages" aria-label="Stage"/>
       <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'due', label: 'Next action due' }, { value: 'today', label: 'Due today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any next action" aria-label="Next action"/>
       <${Select} value=${source} onChange=${setSource} options=${LEAD_SOURCES} blank="All sources" aria-label="Source"/>
@@ -1085,12 +1134,12 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
     ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No leads match. Clear a filter, add a lead, or bulk upload.</div>` : html`
       <div className="card list hide-lg">${rows.map(l => html`<div key=${l.id} className="item click" onClick=${() => openLead(l.id, ids)}>
         <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
-          <div className="small muted">${[l.category, l.school_name, l.source].filter(Boolean).join(' · ')}</div>
+          <div className="small muted">${typeTag(l.lead_type)} ${[l.category, l.school_name].filter(Boolean).join(' · ')}</div>
           <div className="small">Next: ${NO_FOLLOW.includes(l.stage) || !l.next_follow_up ? '—' : html`<b>${l.next_action || 'Follow-up'}</b> · <b className=${followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(l.next_follow_up, l.next_action_time)}</b>`}${isMgr ? html`<span className="muted"> · ${nameOf(l.telecaller_id)}</span>` : ''}</div></div></div>`)}</div>
       <div className="card scroll hide-sm"><table><thead><tr>${isMgr && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${sel.length === rows.length} onChange=${e => setSel(e.target.checked ? ids : [])}/></th>`}<th>Lead</th><th>Grade / school</th><th>Source</th><th>Stage</th>${isMgr && html`<th>Telecaller</th>`}<th>Last contact</th><th>Next action</th></tr></thead>
         <tbody>${rows.map(l => html`<tr key=${l.id} className="click" onClick=${() => openLead(l.id, ids)}>
           ${isMgr && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + l.name} checked=${sel.includes(l.id)} onChange=${e => setSel(e.target.checked ? [...sel, l.id] : sel.filter(x => x !== l.id))}/></td>`}
-          <td><b>${l.name}</b><div className="small muted">${l.code} · ${l.phone}</div></td>
+          <td><b>${l.name}</b> ${l.lead_type === 'Preliminary Programme' ? typeTag(l.lead_type) : ''}<div className="small muted">${l.code} · ${l.phone}</div></td>
           <td>${l.category || '—'}<div className="small muted">${l.school_name || ''}</div></td>
           <td className="small">${l.source}</td><td>${badge(l.stage)}</td>${isMgr && html`<td className="small">${nameOf(l.telecaller_id)}</td>`}
           <td className="small">${fDate(l.last_contact)}</td>
@@ -1104,14 +1153,14 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
 /* ---------- Add / edit lead ---------- */
 function LeadForm({ me, team, lead, onClose, onSaved }) {
   const isMgr = me.role !== 'telecaller';
-  const [f, set] = useForm(lead || { source: 'Walk-in / call', category: '', telecaller_id: '' });
+  const [f, set, setF] = useForm(lead || { source: 'Walk-in / call', category: '', telecaller_id: '', lead_type: 'Young CEO 2.0' });
   const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
   const save = async e => {
     e.preventDefault(); setErr(null);
     if ((f.phone || '').replace(/\D/g, '').length < 8) return setErr('Enter a valid phone number.');
     setBusy(true);
     const row = { name: f.name?.trim(), phone: f.phone?.trim(), whatsapp: f.whatsapp || null, email: f.email ? f.email.trim().toLowerCase() : null,
-      category: f.category || null, school_name: f.school_name || null, district: f.district || null, city: f.city || null, parent_name: f.parent_name || null,
+      category: f.category || null, school_name: f.school_name || null, school_id: f.school_id || null, district: f.district || null, city: f.city || null, parent_name: f.parent_name || null, lead_type: f.lead_type || 'Young CEO 2.0',
       source: f.source || 'Other', campaign: f.campaign || null, remarks: f.remarks || null, next_follow_up: f.next_follow_up || null, next_action: f.next_action || null, next_action_time: f.next_action_time || null };
     if (isMgr && (!lead || f.telecaller_id !== lead.telecaller_id)) row.telecaller_id = f.telecaller_id || null;
     if (!lead && !row.next_follow_up) delete row.next_follow_up;
@@ -1128,10 +1177,11 @@ function LeadForm({ me, team, lead, onClose, onSaved }) {
       <${Field} label="Email"><input className="input" type="email" value=${f.email || ''} onInput=${set('email')}/><//>
       <${Field} label="Grade / category"><${Select} value=${f.category} onChange=${set('category')} options=${LEAD_CATS} blank="—"/><//>
       <${Field} label="Parent's name"><input className="input" value=${f.parent_name || ''} onInput=${set('parent_name')}/><//>
-      <${Field} label="School / college" full><input className="input" value=${f.school_name || ''} onInput=${set('school_name')}/><//>
+      <${Field} label="Lead type *" full><div className="seg" role="radiogroup" aria-label="Lead type">${LEAD_TYPES.map(t => html`<button type="button" key=${t} role="radio" aria-checked=${f.lead_type === t} className=${f.lead_type === t ? 'on' : ''} onClick=${() => set('lead_type')(t)}>${t}</button>`)}</div><//>
+      <${Field} label="School / college" full><${SchoolBox} value=${f.school_name} schoolId=${f.school_id} district=${f.district} onPick=${v => setF(p => ({ ...p, ...v }))}/><//>
       <${Field} label="District"><${Select} value=${f.district} onChange=${set('district')} options=${C.DISTRICTS} blank="—"/><//>
-      <${Field} label="City / town"><input className="input" value=${f.city || ''} onInput=${set('city')}/><//>
-      <${Field} label="Lead source"><${Select} value=${f.source} onChange=${set('source')} options=${LEAD_SOURCES}/><//>
+      <${Field} label="City / town"><${CityBox} value=${f.city} district=${f.district} onChange=${set('city')}/><//>
+      <${Field} label="Lead source"><${Select} value=${f.source} onChange=${v => setF(p => ({ ...p, source: v, lead_type: !lead && v === 'Preliminary programme' ? 'Preliminary Programme' : p.lead_type }))} options=${LEAD_SOURCES}/><//>
       <${Field} label="Campaign / ad / programme"><input className="input" value=${f.campaign || ''} onInput=${set('campaign')} placeholder="e.g. YCEO Nov Reels"/><//>
       ${isMgr && html`<${Field} label="Telecaller"><${Select} value=${f.telecaller_id} onChange=${set('telecaller_id')} options=${callers(team).map(t => ({ value: t.id, label: t.name }))} blank=${lead ? 'Unassigned' : 'Auto (in turn)'}/><//>`}
       <${Field} label="Next action"><${Select} value=${f.next_action} onChange=${set('next_action')} options=${LEAD_ACTIONS} blank=${lead ? '—' : 'First call, today (default)'}/><//>
@@ -1144,7 +1194,7 @@ function LeadForm({ me, team, lead, onClose, onSaved }) {
 }
 
 /* ---------- Lead detail: the telecaller's workspace ---------- */
-function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, bump }) {
+function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openSchool, toast, bump }) {
   const isMgr = me.role !== 'telecaller';
   const [l, setL] = useState(null); const [hist, setHist] = useState([]); const [panel, setPanel] = useState('call');
   const [out, setOut] = useState(''); const [remarks, setRemarks] = useState(''); const [nx, setNx] = useState({ action: '', date: addDays(todayStr(), 1), time: '' });
@@ -1202,13 +1252,13 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, b
   const del = async () => { if (!confirm(`Delete ${l.name}? This cannot be undone.`)) return; const { error } = await db.from('leads').delete().eq('id', l.id); if (error) toast(nice(error)); else { toast('Lead deleted'); bump(); onClose(); } };
   const stepIdx = PIPELINE.indexOf(l.stage);
   const tabs = [['call', 'Log call'], ...(!PAID_STAGES.includes(l.stage) ? [['pay', 'Payment']] : []), ...(PAID_STAGES.includes(l.stage) && !['Idea submitted','Shortlisted'].includes(l.stage) ? [['idea', 'Idea']] : [])];
-  const info = [['Lead ID', l.code], ['Phone', l.phone], ['WhatsApp', l.whatsapp], ['Email', l.email], ['Grade', l.category], ['School', l.school_name],
+  const info = [['Lead ID', l.code], ['Lead type', l.lead_type], ['Phone', l.phone], ['WhatsApp', l.whatsapp], ['Email', l.email], ['Grade', l.category], ['School', l.school_name],
     ['Place', [l.city, l.district].filter(Boolean).join(', ')], ['Parent', l.parent_name], ['Source', [l.source, l.campaign].filter(Boolean).join(' · ')],
     ['Telecaller', nameOf(l.telecaller_id)], ['Added', fDate(istDate(l.created_at))], ['Remarks', l.remarks]];
   if (l.paid_at) info.push(['Payment', `${inr(l.amount)} · ${l.payment_mode || ''} · Ref ${l.payment_ref || '—'} · ${fDate(l.paid_at)}`]);
   if (l.idea_at) info.push(['Idea', [l.idea_title, l.idea_link].filter(Boolean).join(' · ') || 'Submitted ' + fDate(l.idea_at)]);
 
-  return html`<${Modal} title=${l.name} sub=${html`${badge(l.stage)} <span style=${{ marginLeft: 6 }}>${[l.category, l.school_name].filter(Boolean).join(' · ') || l.code}</span>${queue && pos >= 0 ? html`<span className="muted"> · ${pos + 1} of ${queue.length}</span>` : ''}`} onClose=${onClose}>
+  return html`<${Modal} title=${l.name} sub=${html`${badge(l.stage)} ${typeTag(l.lead_type)} <span style=${{ marginLeft: 4 }}>${[l.category, l.school_name].filter(Boolean).join(' · ') || l.code}</span>${queue && pos >= 0 ? html`<span className="muted"> · ${pos + 1} of ${queue.length}</span>` : ''}`} onClose=${onClose}>
     <div className="row" style=${{ marginBottom: 12 }}>
       <a className="btn primary" href=${tel(l.phone)}>${I.phone} Call ${l.phone}</a>
       <a className="btn" href=${wa(l.whatsapp || l.phone)} target="_blank">${I.wa} WhatsApp</a>
@@ -1256,16 +1306,16 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, b
       <div className="small muted">${fDateTime(h.created_at)} · ${nameOf(h.by_user)}${h.next_follow_up ? ' · next: ' + (h.next_action || 'follow-up') + ', ' + whenText(h.next_follow_up, h.next_action_time) : ''}</div>${h.remarks && html`<div className="small">${h.remarks}</div>`}</div>`)}</div>` : html`<p className="muted small">No activity yet. Make the first call.</p>`}
     <h3 style=${{ margin: '20px 0 10px' }}>Details</h3>
     <div className="card list">${info.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 110, flex: 'none' }}>${k}</span><span style=${{ wordBreak: 'break-word' }}>${v || '—'}</span></div>`)}</div>
-    <div className="row" style=${{ marginTop: 14 }}><button className="btn" onClick=${() => editLead(l)}>Edit details</button>${me.role === 'admin' && html`<button className="btn danger" onClick=${del}>Delete lead</button>`}</div>
+    <div className="row" style=${{ marginTop: 14 }}><button className="btn" onClick=${() => editLead(l)}>Edit details</button>${isMgr && l.school_id && openSchool ? html`<button className="btn" onClick=${() => openSchool(l.school_id)}>Open school</button>` : ''}${me.role === 'admin' && html`<button className="btn danger" onClick=${del}>Delete lead</button>`}</div>
   <//>`;
 }
 
 /* ---------- Bulk upload leads (Meta CSV, preliminary sheets, any Excel) ---------- */
 function LeadBulkUpload({ me, team, onClose, onDone }) {
-  const [rows, setRows] = useState(null); const [fileName, setFileName] = useState(''); const [defSource, setDefSource] = useState('Meta Ads');
+  const [rows, setRows] = useState(null); const [fileName, setFileName] = useState(''); const [defSource, setDefSource] = useState('Meta Ads'); const [defType, setDefType] = useState('Young CEO 2.0');
   const [campaign, setCampaign] = useState(''); const [prog, setProg] = useState(null); const [res, setRes] = useState(null); const [err, setErr] = useState(null);
   const get = (r, ...k) => { for (const c of Object.keys(r)) if (k.includes(c.trim().toLowerCase().replace(/[_?]/g, ' ').replace(/\s+/g, ' ').trim())) return String(r[c] ?? '').trim(); return ''; };
-  const template = () => exportExcel('Young CEO leads template', { Leads: [{ Name: 'Aysha Fathima', Phone: '9847000000', WhatsApp: '', Email: '', Grade: 'Grade 11', School: 'Ideal Higher Secondary School', District: 'Kozhikode', City: 'Kuttiady', 'Parent name': '', Source: 'Preliminary programme', Campaign: 'Ideal HSS session', 'Telecaller email': '', Remarks: '' }] });
+  const template = () => exportExcel('Young CEO leads template', { Leads: [{ 'Lead type': 'Preliminary Programme', Name: 'Aysha Fathima', Phone: '9847000000', WhatsApp: '', Email: '', Grade: 'Grade 11', School: 'Ideal Higher Secondary School', District: 'Kozhikode', City: 'Kuttiady', 'Parent name': '', Source: 'Preliminary programme', Campaign: 'Ideal HSS session', 'Telecaller email': '', Remarks: '' }] });
   const read = async e => {
     const f = e.target.files[0]; if (!f) return; setErr(null); setRes(null);
     try {
@@ -1281,7 +1331,7 @@ function LeadBulkUpload({ me, team, onClose, onDone }) {
   const nameOfRow = r => get(r, 'name', 'full name', 'student name', 'student', 'participant name');
   const phoneOfRow = r => get(r, 'phone', 'phone number', 'mobile', 'mobile number', 'contact', 'contact number', 'whatsapp number').replace(/^p:/i, '');
   const run = async () => {
-    let added = 0; const skipped = []; const seen = new Set();
+    let added = 0; const skipped = []; const seen = new Set(); const dir = await schoolDir(true);
     for (let i = 0; i < rows.length; i++) {
       setProg({ done: i, total: rows.length });
       const r = rows[i], row = i + 2, name = nameOfRow(r), phone = phoneOfRow(r), digits = phone.replace(/\D/g, '').slice(-10);
@@ -1297,6 +1347,10 @@ function LeadBulkUpload({ me, team, onClose, onDone }) {
         district: get(r, 'district') || null, city: get(r, 'city', 'town', 'place') || null, parent_name: get(r, 'parent name', 'parent', 'guardian') || null,
         source: LEAD_SOURCES.includes(src) ? src : defSource, campaign: campaign || get(r, 'campaign', 'campaign name', 'ad name', 'form name', 'programme') || null,
         remarks: get(r, 'remarks', 'notes') || null };
+      const tTxt = get(r, 'type', 'lead type', 'programme type');
+      row_.lead_type = LEAD_TYPES.includes(tTxt) ? tTxt : /prelim/i.test(tTxt) ? 'Preliminary Programme' : tTxt ? 'Young CEO 2.0' : defType;
+      const match = row_.school_name && dir.find(sc => norm(sc.name) === norm(row_.school_name));
+      if (match) row_.school_id = match.id;
       if (tc) row_.telecaller_id = tc;
       const { error } = await db.from('leads').insert(row_);
       if (error) skipped.push({ row, name, why: nice(error) }); else added++;
@@ -1307,11 +1361,12 @@ function LeadBulkUpload({ me, team, onClose, onDone }) {
   return html`<${Modal} title="Bulk upload leads" sub="Meta Ads CSV export, preliminary programme sheets or any Excel. Same phone = skipped." onClose=${busy ? () => {} : onClose}>
     <ol className="small soft" style=${{ paddingLeft: 18, margin: '0 0 14px' }}>
       <li><b>Meta Ads:</b> Ads Manager → Lead forms → Download leads (CSV) and upload as it is — columns like full_name and phone_number are read automatically.</li>
-      <li><b>Preliminary programme / other lists:</b> use the template. <b>Name and Phone</b> are required.</li>
+      <li><b>Preliminary programme / other lists:</b> use the template. <b>Name and Phone</b> are required. School names that match your CRM schools are linked automatically.</li>
       <li>Leads without a telecaller are shared out <b>in turn</b> automatically.</li>
     </ol>
     <div className="form two" style=${{ marginBottom: 12 }}>
-      <${Field} label="Source for rows without one"><${Select} value=${defSource} onChange=${setDefSource} options=${LEAD_SOURCES}/><//>
+      <${Field} label="Lead type for this file"><${Select} value=${defType} onChange=${setDefType} options=${LEAD_TYPES}/><//>
+      <${Field} label="Source for rows without one"><${Select} value=${defSource} onChange=${v => { setDefSource(v); if (v === 'Preliminary programme') setDefType('Preliminary Programme'); }} options=${LEAD_SOURCES}/><//>
       <${Field} label="Campaign / programme name (optional)"><input className="input" value=${campaign} onInput=${e => setCampaign(e.target.value)} placeholder="e.g. Ideal HSS preliminary, 20 Nov"/><//>
     </div>
     <div className="row" style=${{ marginBottom: 12 }}><button className="btn" onClick=${template} disabled=${busy}>Download template</button>
@@ -1336,26 +1391,26 @@ const LEAD_REPORTS = [
   ['all', 'All leads', 'Every lead with stage, telecaller, payment and idea details'],
   ['callers', 'Telecaller performance', 'Leads, calls, contacted, paid and conversion per telecaller'],
   ['payments', 'Payments', 'Every ₹' + (window.CRM_CONFIG.REG_FEE || 299) + ' registration with transaction ID — for accounts'],
-  ['sources', 'Sources & campaigns', 'Which sources and campaigns bring paid participants'],
+  ['sources', 'Types, sources & schools', 'Leads, paid and conversion by lead type, source, campaign and school'],
   ['due', 'Next actions due', 'Open leads whose next action is due today or overdue'],
 ];
 async function buildLeadReport(key, team, range) {
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
   const inRange = iso => (!range.from || istDate(iso) >= range.from) && (!range.to || istDate(iso) <= range.to);
-  const L = (await fetchAll(() => db.from('leads').select('*').order('created_at', { ascending: false }))).filter(l => inRange(l.created_at));
-  if (key === 'all') return { Leads: L.map(l => ({ 'Lead ID': l.code, Name: l.name, Phone: l.phone, WhatsApp: l.whatsapp, Email: l.email, Grade: l.category, School: l.school_name,
+  const L = (await fetchAll(() => db.from('leads').select('*').order('created_at', { ascending: false }))).filter(l => inRange(l.created_at) && (!range.type || l.lead_type === range.type));
+  if (key === 'all') return { Leads: L.map(l => ({ 'Lead ID': l.code, Type: l.lead_type, Name: l.name, Phone: l.phone, WhatsApp: l.whatsapp, Email: l.email, Grade: l.category, School: l.school_name,
     District: l.district, City: l.city, Parent: l.parent_name, Source: l.source, Campaign: l.campaign, Stage: l.stage, Telecaller: nameOf(l.telecaller_id),
     'Last contact': l.last_contact, 'Next action': l.next_action, 'Next action date': l.next_follow_up, Time: l.next_action_time?.slice(0, 5), 'Paid on': l.paid_at, Amount: l.amount ? +l.amount : null, 'Payment ref': l.payment_ref,
     'Payment mode': l.payment_mode, Idea: l.idea_title, 'Idea link': l.idea_link, 'Idea date': l.idea_at, Added: istDate(l.created_at), Remarks: l.remarks })) };
   if (key === 'payments') { const P = L.filter(l => l.paid_at).sort((a, b) => b.paid_at.localeCompare(a.paid_at));
-    const rows = P.map(l => ({ 'Paid on': l.paid_at, 'Lead ID': l.code, Name: l.name, Phone: l.phone, School: l.school_name, Amount: +l.amount || 0, Mode: l.payment_mode, 'Transaction ID': l.payment_ref, Telecaller: nameOf(l.telecaller_id), Stage: l.stage }));
+    const rows = P.map(l => ({ 'Paid on': l.paid_at, 'Lead ID': l.code, Type: l.lead_type, Name: l.name, Phone: l.phone, School: l.school_name, Amount: +l.amount || 0, Mode: l.payment_mode, 'Transaction ID': l.payment_ref, Telecaller: nameOf(l.telecaller_id), Stage: l.stage }));
     if (rows.length) rows.push({ 'Paid on': 'TOTAL', Name: `${rows.length} payments`, Amount: rows.reduce((a, r) => a + r.Amount, 0) });
     return { Payments: rows }; }
   if (key === 'due') { const t = todayStr(); return { 'Follow-ups due': L.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= t).sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up))
     .map(l => ({ 'Lead ID': l.code, Name: l.name, Phone: l.phone, Stage: l.stage, Telecaller: nameOf(l.telecaller_id), 'Last contact': l.last_contact, 'Next action': l.next_action, Due: l.next_follow_up, Time: l.next_action_time?.slice(0, 5), 'Days overdue': Math.round((Date.parse(t) - Date.parse(l.next_follow_up)) / 864e5) })) }; }
   if (key === 'sources') { const g = (k) => Object.entries(L.reduce((m, l) => { const x = l[k] || '(none)'; (m[x] ||= []).push(l); return m; }, {}))
-      .map(([x, v]) => { const p = v.filter(l => PAID_STAGES.includes(l.stage)); return { [k === 'source' ? 'Source' : 'Campaign']: x, Leads: v.length, Contacted: v.filter(l => l.stage !== 'New').length, Paid: p.length, 'Conversion %': Math.round(p.length / v.length * 100), Revenue: p.reduce((a, l) => a + (+l.amount || 0), 0), 'Ideas submitted': v.filter(l => ['Idea submitted','Shortlisted'].includes(l.stage)).length }; }).sort((a, b) => b.Leads - a.Leads);
-    return { Sources: g('source'), Campaigns: g('campaign') }; }
+      .map(([x, v]) => { const p = v.filter(l => PAID_STAGES.includes(l.stage)); return { [{ source: 'Source', campaign: 'Campaign', lead_type: 'Lead type', school_name: 'School' }[k]]: x, Leads: v.length, Contacted: v.filter(l => l.stage !== 'New').length, Paid: p.length, 'Conversion %': Math.round(p.length / v.length * 100), Revenue: p.reduce((a, l) => a + (+l.amount || 0), 0), 'Ideas submitted': v.filter(l => ['Idea submitted','Shortlisted'].includes(l.stage)).length }; }).sort((a, b) => b.Leads - a.Leads);
+    return { 'Lead types': g('lead_type'), Sources: g('source'), Campaigns: g('campaign'), Schools: g('school_name') }; }
   let A = await fetchAll(() => db.from('lead_activities').select('by_user,type,outcome,created_at'));
   A = A.filter(a => inRange(a.created_at));
   return { 'Telecaller performance': callers(team).concat(team.filter(t => t.role === 'telecaller' && !t.active)).map(t => { const mine = L.filter(l => l.telecaller_id === t.id), a = A.filter(x => x.by_user === t.id), p = mine.filter(l => PAID_STAGES.includes(l.stage));
@@ -1367,8 +1422,8 @@ async function buildLeadReport(key, team, range) {
 }
 function LeadReports({ me, team, toast }) {
   const [key, setKey] = useState(me.role === 'telecaller' ? 'due' : 'callers'); const [data, setData] = useState(null); const [sheet, setSheet] = useState(0);
-  const [from, setFrom] = useState(''); const [to, setTo] = useState('');
-  useEffect(() => { setData(null); setSheet(0); buildLeadReport(key, team, { from, to }).then(setData).catch(e => toast(nice(e))); }, [key, from, to]);
+  const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [rtype, setRtype] = useState('');
+  useEffect(() => { setData(null); setSheet(0); buildLeadReport(key, team, { from, to, type: rtype }).then(setData).catch(e => toast(nice(e))); }, [key, from, to, rtype]);
   const names = data ? Object.keys(data) : []; const rows = data ? data[names[sheet]] || [] : []; const cols = rows[0] ? Object.keys(rows[0]) : [];
   const info = LEAD_REPORTS.find(r => r[0] === key);
   const list = me.role === 'telecaller' ? LEAD_REPORTS.filter(r => ['all', 'due', 'payments'].includes(r[0])) : LEAD_REPORTS;
@@ -1377,6 +1432,7 @@ function LeadReports({ me, team, toast }) {
       <button className="btn primary" disabled=${!data} onClick=${() => exportExcel('Young CEO ' + info[1], data)}>Download Excel</button></div>
     <div className="chips" style=${{ marginBottom: 12 }}>${list.map(r => html`<button key=${r[0]} className=${'chip' + (key === r[0] ? ' on' : '')} onClick=${() => setKey(r[0])}>${r[1]}</button>`)}</div>
     <div className="row" style=${{ marginBottom: 10 }}><span className="soft small">${info[2]}.</span><span className="grow"/>
+      <${Select} value=${rtype} onChange=${setRtype} options=${LEAD_TYPES} blank="All lead types" aria-label="Lead type" style=${{ width: 'auto', padding: '6px 8px' }}/>
       <label className="small row">Leads added from <input className="input" type="date" value=${from} onInput=${e => setFrom(e.target.value)} style=${{ width: 'auto', padding: '6px 8px' }}/></label>
       <label className="small row">to <input className="input" type="date" value=${to} onInput=${e => setTo(e.target.value)} style=${{ width: 'auto', padding: '6px 8px' }}/></label>
       ${(from || to) && html`<button className="btn sm" onClick=${() => { setFrom(''); setTo(''); }}>All time</button>`}</div>
@@ -1423,14 +1479,16 @@ function MetaConnect({ toast }) {
   const pickPage = p => run('forms', async () => {
     const r = await fbApi(`/${p.id}/leadgen_forms`, { fields: 'id,name,status,leads_count', limit: 100, access_token: p.access_token });
     const forms = r.data || [];
-    setFlow({ step: 'forms', userToken: flow.userToken, page: p, forms, sel: forms.filter(f => f.status === 'ACTIVE').map(f => f.id), all: false });
+    setFlow({ step: 'forms', userToken: flow.userToken, page: p, forms, sel: forms.filter(f => f.status === 'ACTIVE').map(f => f.id), all: false,
+      types: Object.fromEntries(forms.map(f => [f.id, /prelim/i.test(f.name) ? 'Preliminary Programme' : 'Young CEO 2.0'])) });
   });
   const editForms = c => run('forms', async () => {
     const r = await metaFn('forms', { page_id: c.page_id });
-    setFlow({ step: 'forms', editing: true, page: { id: c.page_id, name: c.page_name }, forms: r.forms, sel: (r.selected || []).map(f => f.id), all: !(r.selected || []).length });
+    const types = Object.fromEntries(r.forms.map(f => [f.id, (r.selected || []).find(x => x.id === f.id)?.type || (/prelim/i.test(f.name) ? 'Preliminary Programme' : 'Young CEO 2.0')]));
+    setFlow({ step: 'forms', editing: true, page: { id: c.page_id, name: c.page_name }, forms: r.forms, sel: (r.selected || []).map(f => f.id), all: !(r.selected || []).length, types });
   });
   const save = () => run('save', async () => {
-    const forms = flow.all ? [] : flow.forms.filter(f => flow.sel.includes(f.id)).map(f => ({ id: f.id, name: f.name }));
+    const forms = flow.all ? [] : flow.forms.filter(f => flow.sel.includes(f.id)).map(f => ({ id: f.id, name: f.name, type: flow.types?.[f.id] || 'Young CEO 2.0' }));
     if (!flow.all && !forms.length) throw new Error('Tick at least one lead form, or choose "All forms".');
     if (flow.editing) await metaFn('save_forms', { page_id: flow.page.id, forms });
     else await metaFn('connect', { user_token: flow.userToken, page_id: flow.page.id, forms });
@@ -1460,7 +1518,7 @@ function MetaConnect({ toast }) {
     ${conns.map(c => html`<div key=${c.page_id} className="card pad" style=${{ marginTop: 12, background: 'var(--paper)' }}>
       <div className="row" style=${{ justifyContent: 'space-between' }}>
         <div><b>✓ ${c.page_name}</b> <span className="badge b-Paid">Connected</span>
-          <div className="small soft">Forms: ${(c.forms || []).length ? c.forms.map(f => f.name).join(', ') : 'All lead forms on this page'}</div>
+          <div className="small soft">Forms: ${(c.forms || []).length ? c.forms.map(f => `${f.name} (${f.type === 'Preliminary Programme' ? 'Preliminary' : 'Young CEO 2.0'})`).join(', ') : 'All lead forms on this page (as Young CEO 2.0; form names with "preliminary" as Preliminary)'}</div>
           <div className="small muted">${c.leads_received || 0} leads received${c.last_lead_at ? ' · last ' + fDateTime(c.last_lead_at) : ''} · connected by ${c.connected_by || '—'} on ${fDate(istDate(c.connected_at))}</div></div>
         <div className="row"><button className="btn sm" disabled=${!!busy} onClick=${() => editForms(c)}>Change forms</button><button className="btn sm danger" disabled=${!!busy} onClick=${() => disconnect(c)}>Disconnect</button></div>
       </div>
@@ -1485,6 +1543,8 @@ function MetaConnect({ toast }) {
       ${!flow.all && html`<div className="card list">${flow.forms.length ? flow.forms.map(f => html`<label key=${f.id} className="item click" style=${{ cursor: 'pointer' }}>
         <input type="checkbox" checked=${flow.sel.includes(f.id)} onChange=${e => setFlow({ ...flow, sel: e.target.checked ? [...flow.sel, f.id] : flow.sel.filter(x => x !== f.id) })}/>
         <span className="grow"><b>${f.name}</b>${f.leads_count != null ? html`<span className="small muted"> · ${f.leads_count} leads so far</span>` : ''}</span>
+        ${flow.sel.includes(f.id) && html`<select className="input" style=${{ width: 'auto', padding: '4px 8px', fontSize: 13 }} aria-label=${'Lead type for ' + f.name} value=${flow.types?.[f.id] || 'Young CEO 2.0'}
+          onClick=${e => e.preventDefault()} onChange=${e => setFlow({ ...flow, types: { ...flow.types, [f.id]: e.target.value } })}>${LEAD_TYPES.map(t => html`<option key=${t}>${t}</option>`)}</select>`}
         <span className=${'badge ' + (f.status === 'ACTIVE' ? 'b-Paid' : '')}>${f.status === 'ACTIVE' ? 'Active' : (f.status || '').toLowerCase()}</span></label>`)
         : html`<p className="pad small muted">This page has no lead forms yet. Create one in Meta Ads Manager, or choose "All lead forms" so future forms are included.</p>`}</div>`}
       <div className="row" style=${{ marginTop: 10 }}><button className="btn primary" disabled=${!!busy} onClick=${save}>${busy === 'save' ? 'Saving…' : flow.editing ? 'Save forms' : 'Connect'}</button><button className="btn" onClick=${() => setFlow(null)}>Cancel</button></div></div>`}
@@ -1498,7 +1558,7 @@ function Connect({ toast }) {
   const [key, setKey] = useState(null); const [show, setShow] = useState(false); const [test, setTest] = useState(null);
   useEffect(() => { db.rpc('admin_get_intake_key').then(({ data, error }) => error ? toast(nice(error)) : setKey(data)); }, []);
   const url = `${C.SUPABASE_URL}/rest/v1/rpc/capture_lead`;
-  const body = k => JSON.stringify({ p_key: k, p_name: '{{Full name}}', p_phone: '{{Phone number}}', p_email: '{{Email}}', p_category: '{{Class}}', p_school: '{{School}}', p_district: '{{District}}', p_source: 'Meta Ads', p_campaign: '{{Campaign name}}' }, null, 2);
+  const body = k => JSON.stringify({ p_key: k, p_name: '{{Full name}}', p_phone: '{{Phone number}}', p_email: '{{Email}}', p_category: '{{Class}}', p_school: '{{School}}', p_district: '{{District}}', p_source: 'Meta Ads', p_campaign: '{{Campaign name}}', p_type: 'Young CEO 2.0' }, null, 2);
   const copy = (t, m) => { navigator.clipboard?.writeText(t); toast(m || 'Copied'); };
   const regen = async () => { if (!confirm('Make a new intake key? Make/Zapier and the website form will stop sending leads until you update them with the new key.')) return;
     const { data, error } = await db.rpc('admin_new_intake_key'); if (error) toast(nice(error)); else { setKey(data); toast('New key created'); } };
@@ -1562,7 +1622,7 @@ document.getElementById('yceo-form').addEventListener('submit', async (e) => {
         <li>Click <b>Run once</b>, submit a test lead on your form (Meta's Lead Ads Testing Tool), check it appears in Leads, then switch the scenario <b>ON</b>.</li>
       </ol>
       <${Field} label="Request body (JSON)"><${Code} text=${body(show && key ? key : 'YOUR-INTAKE-KEY')} label="Body"/><//>
-      <p className="small muted" style=${{ marginTop: 8 }}>Only p_key, p_name and p_phone are required. Same phone number twice = no duplicate; it's noted on the existing lead.</p>
+      <p className="small muted" style=${{ marginTop: 8 }}>Use p_type "Preliminary Programme" for preliminary forms. Only p_key, p_name and p_phone are required. Same phone number twice = no duplicate; it's noted on the existing lead.</p>
     </div>
 
     <div className="card pad">

@@ -171,6 +171,56 @@ const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x
 const fDate = d => d ? `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}` : '—';
 const fShort = d => d ? `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]}` : '—';
 const fTime = t => { if (!t) return ''; let [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')} ${ap}`; };
+const SCHOOL_ACTIONS = ['First call','Follow-up call','WhatsApp follow-up','Visit school','Principal meeting','Coordinator meeting','Send proposal','Confirm programme date','Schedule programme','Send programme reminder'];
+const LEAD_ACTIONS = ['First call','Follow-up call','WhatsApp follow-up','Send payment link','Check payment','Send idea form','Check idea submission','Call parent','Call back — registered again'];
+const whenText = (d, t) => !d ? '—' : (d === todayStr() ? 'Today' : d === addDays(todayStr(), 1) ? 'Tomorrow' : d < todayStr() ? fShort(d) + ' (overdue)' : weekday(d) + ' ' + fShort(d)) + (t ? ', ' + fTime(t) : '');
+const byWhen = (a, b) => (a.next_follow_up || '9').localeCompare(b.next_follow_up || '9') || (a.next_action_time || '99').localeCompare(b.next_action_time || '99');
+// a time a few hours from now (India time); after 6 pm it rolls to 10 am tomorrow
+const laterToday = h => { const d = new Date(Date.now() + 5.5 * 3600e3), hr = d.getUTCHours() + h; return hr >= 19 ? [addDays(todayStr(), 1), '10:00'] : [todayStr(), String(hr).padStart(2, '0') + ':00']; };
+// Suggested next step after a school activity: [action, date, time]
+function suggestSchool(outcome, type, status) {
+  const t = todayStr();
+  if (outcome === 'Confirmed') return ['Schedule programme', t, ''];
+  if (outcome === 'Not interested') return [null, null, ''];
+  if (outcome === 'Interested') return type === 'Principal meeting' || type === 'Coordinator meeting' ? ['Confirm programme date', addDays(t, 2), ''] : type === 'School visit' ? ['Principal meeting', addDays(t, 3), '11:00'] : ['Visit school', addDays(t, 2), '11:00'];
+  if (outcome === 'Call back later') return ['Follow-up call', addDays(t, 1), '11:00'];
+  if (outcome === 'No response') return type === 'Call' ? ['WhatsApp follow-up', t, ''] : ['Follow-up call', addDays(t, 1), '11:00'];
+  return status === 'Confirmed' || status === 'Programme scheduled' ? ['Confirm programme date', addDays(t, 3), ''] : ['Follow-up call', addDays(t, 3), ''];
+}
+// Suggested next step after a lead call: [action, date, time]
+function suggestLead(outcome, lead) {
+  const t = todayStr(), paid = ['Paid','Idea submitted','Shortlisted'].includes(lead.stage), miss = lead.no_answer_count || 0;
+  if (outcome === 'Not interested' || outcome === 'Wrong number') return [null, null, ''];
+  if (paid) return outcome === 'Interested' || outcome === 'Connected' ? ['Check idea submission', addDays(t, 2), ''] : ['Send idea form', ...laterToday(3)];
+  if (outcome === 'Interested') return ['Send payment link', t, ''];
+  if (outcome === 'Connected') return lead.stage === 'Payment pending' ? ['Check payment', addDays(t, 1), ''] : ['Follow-up call', addDays(t, 2), ''];
+  if (outcome === 'Call back later') return ['Follow-up call', ...laterToday(3)];
+  if (['No answer','Busy','Switched off'].includes(outcome)) return miss >= 1 ? ['WhatsApp follow-up', t, ''] : ['Follow-up call', ...laterToday(3)];
+  return ['Follow-up call', addDays(t, 1), ''];
+}
+function NextAction({ actions, value, onChange, required }) {   // value: { action, date, time }
+  return html`<div className="form two" style=${{ gap: 10 }}>
+    <${Field} label=${'Next action' + (required ? ' *' : '')}><${Select} value=${value.action} onChange=${v => onChange({ ...value, action: v })} options=${actions} blank="—" required=${required}/><//>
+    <div className="row" style=${{ flexWrap: 'nowrap', alignItems: 'flex-end', gap: 6 }}>
+      <${Field} label=${'Date' + (required ? ' *' : '')}><input className="input" type="date" min=${todayStr()} value=${value.date || ''} onInput=${e => onChange({ ...value, date: e.target.value })} required=${required}/><//>
+      <${Field} label="Time"><input className="input" type="time" value=${(value.time || '').slice(0, 5)} onInput=${e => onChange({ ...value, time: e.target.value })} style=${{ width: 116 }}/><//>
+    </div>
+    <div className="row full" style=${{ gap: 6 }}>${[['Today', 0], ['Tomorrow', 1], ['+2 days', 2], ['+1 week', 7]].map(([l, n]) => html`<button type="button" key=${l} className="btn sm" onClick=${() => onChange({ ...value, date: addDays(todayStr(), n) })}>${l}</button>`)}</div>
+  </div>`;
+}
+// Editable "Next:" banner for school and lead pages
+function NextBanner({ row, actions, closed, onSave }) {
+  const [edit, setEdit] = useState(false); const [v, setV] = useState({ action: row.next_action || '', date: row.next_follow_up || '', time: row.next_action_time || '' });
+  useEffect(() => setV({ action: row.next_action || '', date: row.next_follow_up || '', time: row.next_action_time || '' }), [row.next_action, row.next_follow_up, row.next_action_time]);
+  if (closed) return null;
+  const fs = followState(row.next_follow_up);
+  return html`<div className=${'msg ' + (!row.next_follow_up ? 'warn' : fs === 'overdue' ? 'bad' : fs === 'today' ? 'warn' : 'ok')} style=${{ marginBottom: 16, color: 'var(--ink)' }}>
+    ${!edit ? html`<div className="row" style=${{ justifyContent: 'space-between' }}><span>Next: <b>${row.next_action || 'No action planned'}</b>${row.next_follow_up ? html` · <b className=${fs === 'overdue' ? 'bad' : ''}>${whenText(row.next_follow_up, row.next_action_time)}</b>` : ''}</span>
+        <button className="btn sm" onClick=${() => setEdit(true)}>${row.next_follow_up ? 'Change' : 'Plan next action'}</button></div>`
+    : html`<${NextAction} actions=${actions} value=${v} onChange=${setV}/>
+      <div className="row" style=${{ marginTop: 10 }}><button className="btn sm primary" onClick=${async () => { if (!v.action || !v.date) return; await onSave(v); setEdit(false); }}>Save next action</button><button className="btn sm" onClick=${() => setEdit(false)}>Cancel</button></div>`}
+  </div>`;
+}
 const fDateTime = iso => iso ? new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(iso)) : '—';
 const weekday = d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d + 'T00:00:00Z').getUTCDay()];
 const badge = s => html`<span className=${'badge b-' + String(s).replace(/ /g, '-')}>${s}</span>`;
@@ -271,7 +321,7 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
   const load = useCallback(async () => {
     const today = todayStr();
     const [schools, progs, acts] = await Promise.all([
-      fetchAll(() => db.from('schools').select('id,name,city,district,status,officer_id,next_follow_up,phone,whatsapp,coordinator,principal,students')),
+      fetchAll(() => db.from('schools').select('id,name,city,district,status,officer_id,next_follow_up,next_action,next_action_time,phone,whatsapp,coordinator,principal,students')),
       fetchAll(() => db.from('programmes').select('id,code,date,start_time,end_time,type,status,expected,actual,officer_id,venue,schools(name)')),
       isMgr ? fetchAll(() => db.from('outreach').select('officer_id,type')) : Promise.resolve([]),
     ]);
@@ -284,7 +334,7 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
   const count = f => schools.filter(f).length;
   const confirmed = s => ['Confirmed','Programme scheduled','Programme completed'].includes(s.status);
   const open = s => !CLOSED.includes(s.status);
-  const due = schools.filter(s => open(s) && s.next_follow_up && s.next_follow_up <= today).sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up));
+  const due = schools.filter(s => open(s) && s.next_follow_up && s.next_follow_up <= today).sort(byWhen);
   const week = progs.filter(p => p.date >= today && p.date <= addDays(today, 7) && p.status !== 'Cancelled' && p.status !== 'Completed').sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
   const done = progs.filter(p => p.status === 'Completed');
   const total = schools.length || 1;
@@ -319,11 +369,11 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
       ${(n => n + (n === 1 ? ' follow-up' : ' follow-ups'))(due.filter(s => s.next_follow_up === today).length)} due today · ${(n => n + (n === 1 ? ' programme' : ' programmes'))(week.length)} in the next 7 days · ${done.reduce((a, p) => a + (p.actual || 0), 0).toLocaleString('en-IN')} students reached</p>
 
     <div className="grid g2">
-      <div className="card"><div className="item"><h2 className="grow">Follow up now</h2><span className="muted small">${due.length}</span></div>
+      <div className="card"><div className="item"><h2 className="grow">Next actions due</h2><span className="muted small">${due.length}</span></div>
         <div className="list">${due.slice(0, 10).map(s => html`<div key=${s.id} className="item">
           <div className="grow click" onClick=${() => openSchool(s.id)}><div className="trunc" style=${{ fontWeight: 600 }}>${s.name}</div>
-            <div className="trunc small muted">${s.city}, ${s.district} · ${s.coordinator || s.principal || 'No contact'}${isMgr ? ' · ' + nameOf(s.officer_id) : ''}</div></div>
-          <span className=${'small ' + (s.next_follow_up < today ? 'bad' : 'warn')} style=${{ fontWeight: 700 }}>${s.next_follow_up < today ? fShort(s.next_follow_up) : 'Today'}</span>
+            <div className="trunc small"><b>${s.next_action || 'Follow-up'}</b> <span className="muted">· ${s.city} · ${s.coordinator || s.principal || 'No contact'}${isMgr ? ' · ' + nameOf(s.officer_id) : ''}</span></div></div>
+          <span className=${'small ' + (s.next_follow_up < today ? 'bad' : 'warn')} style=${{ fontWeight: 700, textAlign: 'right' }}>${s.next_follow_up < today ? fShort(s.next_follow_up) : s.next_action_time ? fTime(s.next_action_time) : 'Today'}</span>
           ${s.phone && html`<a className="icon" href=${tel(s.phone)} aria-label="Call">${I.phone}</a>`}
           ${(s.whatsapp || s.phone) && html`<a className="icon ok" href=${wa(s.whatsapp || s.phone)} target="_blank" aria-label="WhatsApp">${I.wa}</a>`}
         </div>`)}
@@ -362,7 +412,7 @@ function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump })
   useEffect(() => {
     let alive = true;
     const t = setTimeout(async () => {
-      let x = db.from('schools').select('id,code,name,city,district,board,status,coordinator,principal,phone,officer_id,last_contact,next_follow_up', { count: 'exact' });
+      let x = db.from('schools').select('id,code,name,city,district,board,status,coordinator,principal,phone,officer_id,last_contact,next_follow_up,next_action,next_action_time', { count: 'exact' });
       const s = clean(q); if (s) x = x.or(`name.ilike.%${s}%,code.ilike.%${s}%,city.ilike.%${s}%,phone.ilike.%${s}%,coordinator.ilike.%${s}%,principal.ilike.%${s}%`);
       if (status === 'Confirmed') x = x.in('status', ['Confirmed','Programme scheduled','Programme completed']); else if (status) x = x.eq('status', status);
       if (district) x = x.eq('district', district);
@@ -387,20 +437,20 @@ function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump })
       <${Select} value=${status} onChange=${setStatus} options=${STATUSES} blank="All statuses" aria-label="Status"/>
       <${Select} value=${district} onChange=${setDistrict} options=${C.DISTRICTS} blank="All districts" aria-label="District"/>
       ${isMgr && html`<${Select} value=${officer} onChange=${setOfficer} options=${[{ value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))]} blank="All officers" aria-label="Officer"/>`}
-      <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'today', label: 'Follow-up today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any follow-up" aria-label="Follow-up"/>
+      <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'today', label: 'Next action today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any next action" aria-label="Next action"/>
     </div>
     ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No schools match. Clear a filter or add a school.</div>` : html`
       <div className="card list hide-lg">${rows.map(s => html`<div key=${s.id} className="item click" onClick=${() => openSchool(s.id)}>
         <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${s.name}</b>${badge(s.status)}</div>
         <div className="small muted">${s.code} · ${s.city}, ${s.district}</div>
-        <div className="small">Follow-up: <b className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}>${fDate(s.next_follow_up)}</b>${isMgr ? html`<span className="muted"> · ${nameOf(s.officer_id)}</span>` : ''}</div></div></div>`)}</div>
-      <div className="card scroll hide-sm"><table><thead><tr><th>School</th><th>District</th><th>Contact</th><th>Status</th>${isMgr && html`<th>Officer</th>`}<th>Last contact</th><th>Follow-up</th></tr></thead>
+        <div className="small">Next: ${s.next_action ? html`<b>${s.next_action}</b> · ` : ''}<b className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(s.next_follow_up, s.next_action_time)}</b>${isMgr ? html`<span className="muted"> · ${nameOf(s.officer_id)}</span>` : ''}</div></div></div>`)}</div>
+      <div className="card scroll hide-sm"><table><thead><tr><th>School</th><th>District</th><th>Contact</th><th>Status</th>${isMgr && html`<th>Officer</th>`}<th>Last contact</th><th>Next action</th></tr></thead>
         <tbody>${rows.map(s => html`<tr key=${s.id} className="click" onClick=${() => openSchool(s.id)}>
           <td><b>${s.name}</b><div className="small muted">${s.code}${s.board ? ' · ' + s.board : ''}</div></td>
           <td>${s.district}<div className="small muted">${s.city}</div></td>
           <td>${s.coordinator || s.principal || '—'}<div className="small muted">${s.phone || ''}</div></td>
           <td>${badge(s.status)}</td>${isMgr && html`<td>${nameOf(s.officer_id)}</td>`}
-          <td>${fDate(s.last_contact)}</td><td className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}><b>${fDate(s.next_follow_up)}</b></td></tr>`)}</tbody></table></div>
+          <td>${fDate(s.last_contact)}</td><td>${s.next_action ? html`<div className="small">${s.next_action}</div>` : ''}<b className=${'small ' + (followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : '')}>${whenText(s.next_follow_up, s.next_action_time)}</b></td></tr>`)}</tbody></table></div>
       <div className="row" style=${{ justifyContent: 'space-between', marginTop: 12 }}><span className="small muted">Page ${page + 1} of ${pages}</span>
         <div className="row"><button className="btn sm" disabled=${page === 0} onClick=${() => setPage(page - 1)}>Previous</button><button className="btn sm" disabled=${page + 1 >= pages} onClick=${() => setPage(page + 1)}>Next</button></div></div>`}`;
 }
@@ -420,7 +470,7 @@ function SchoolForm({ me, team, school, onClose, onSaved }) {
     setBusy(true);
     const row = { name: f.name?.trim(), district: f.district, city: f.city?.trim(), address: f.address || null, category: f.category || null, board: f.board || null,
       principal: f.principal || null, coordinator: f.coordinator || null, phone: f.phone || null, whatsapp: f.whatsapp || null, email: f.email || null,
-      students: f.students === '' || f.students == null ? null : +f.students, source: f.source || null, status: f.status, next_follow_up: f.next_follow_up || null, remarks: f.remarks || null };
+      students: f.students === '' || f.students == null ? null : +f.students, source: f.source || null, status: f.status, next_follow_up: f.next_follow_up || null, next_action: f.next_action || null, next_action_time: f.next_action_time || null, remarks: f.remarks || null };
     if (isMgr) row.officer_id = f.officer_id || null;
     const res = school ? await db.from('schools').update(row).eq('id', school.id).select('id').single() : await db.from('schools').insert(row).select('id').single();
     setBusy(false);
@@ -443,7 +493,9 @@ function SchoolForm({ me, team, school, onClose, onSaved }) {
       <${Field} label="Assigned officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))} blank="Unassigned"/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
       <${Field} label="Lead source"><${Select} value=${f.source} onChange=${set('source')} options=${C.SOURCES} blank="—"/><//>
       <${Field} label="Status"><${Select} value=${f.status} onChange=${set('status')} options=${STATUSES}/><//>
-      <${Field} label="Next follow-up"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
+      <${Field} label="Next action"><${Select} value=${f.next_action} onChange=${set('next_action')} options=${SCHOOL_ACTIONS} blank=${school ? '—' : 'First call (default)'}/><//>
+      <div className="row" style=${{ flexWrap: 'nowrap', gap: 6, alignItems: 'flex-end' }}><${Field} label="Next action date"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
+        <${Field} label="Time"><input className="input" type="time" value=${(f.next_action_time || '').slice(0, 5)} onInput=${set('next_action_time')} style=${{ width: 116 }}/><//></div>
       <${Field} label="Remarks" full><textarea className="input" rows="3" value=${f.remarks || ''} onInput=${set('remarks')}/><//>
       ${dups.length > 0 && html`<div className="msg warn full"><b>Possible duplicate</b>${dups.map(d => html`<div key=${d.code}>${d.code} · ${d.name}, ${d.city}${d.owner ? ' (owned by ' + d.owner + ')' : ''}</div>`)}
         ${!school && html`<label className="row" style=${{ marginTop: 8, color: 'var(--ink)' }}><input type="checkbox" checked=${sure} onChange=${e => setSure(e.target.checked)}/> This is a different school — save anyway</label>`}</div>`}
@@ -452,26 +504,34 @@ function SchoolForm({ me, team, school, onClose, onSaved }) {
     </form><//>`;
 }
 
-function OutreachForm({ me, team, schoolId, onSaved }) {
-  const [f, set, setF] = useForm({ type: 'Call', done_on: todayStr(), outcome: 'Connected', remarks: '', next_follow_up: addDays(todayStr(), 3), officer_id: me.id });
+function OutreachForm({ me, team, schoolId, status, onSaved }) {
+  const [f, set, setF] = useForm({ type: 'Call', done_on: todayStr(), outcome: 'Connected', remarks: '', officer_id: me.id });
+  const first = suggestSchool('Connected', 'Call', status);
+  const [nx, setNx] = useState({ action: first[0], date: first[1], time: first[2] });
+  const suggest = (outcome, type) => { const [a, d, t] = suggestSchool(outcome, type, status); setNx({ action: a || '', date: d || '', time: t || '' }); };
+  const closing = f.outcome === 'Not interested';
   const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
   const save = async e => {
     e.preventDefault(); setErr(null);
-    if (f.next_follow_up < f.done_on) return setErr('Next follow-up can’t be before the activity date.');
+    if (!closing && (!nx.action || !nx.date)) return setErr('Choose the next action and its date.');
+    if (!closing && nx.date < f.done_on) return setErr('Next action can’t be before the activity date.');
     setBusy(true);
-    const { error } = await db.from('outreach').insert({ school_id: schoolId, type: f.type, done_on: f.done_on, outcome: f.outcome, remarks: f.remarks.trim(), next_follow_up: f.next_follow_up, officer_id: me.role === 'officer' ? me.id : f.officer_id });
+    const { error } = await db.from('outreach').insert({ school_id: schoolId, type: f.type, done_on: f.done_on, outcome: f.outcome, remarks: f.remarks.trim(),
+      next_follow_up: closing ? null : nx.date, next_action: closing ? null : nx.action, next_action_time: closing || !nx.time ? null : nx.time,
+      officer_id: me.role === 'officer' ? me.id : f.officer_id });
     setBusy(false);
     if (error) setErr(nice(error)); else { setF(p => ({ ...p, remarks: '' })); onSaved(); }
   };
   return html`<form className="form" onSubmit=${save}>
-    <div className="chips" role="radiogroup" aria-label="Activity">${TYPES.map(t => html`<button type="button" key=${t} role="radio" aria-checked=${f.type === t} className=${'chip' + (f.type === t ? ' on' : '')} onClick=${() => set('type')(t)}>${t}</button>`)}</div>
+    <div className="chips" role="radiogroup" aria-label="Activity">${TYPES.map(t => html`<button type="button" key=${t} role="radio" aria-checked=${f.type === t} className=${'chip' + (f.type === t ? ' on' : '')} onClick=${() => { set('type')(t); suggest(f.outcome, t); }}>${t}</button>`)}</div>
     <div className="form two">
       <${Field} label="Date"><input className="input" type="date" max=${todayStr()} required value=${f.done_on} onInput=${set('done_on')}/><//>
-      <${Field} label="Outcome"><${Select} value=${f.outcome} onChange=${set('outcome')} options=${OUTCOMES}/><//>
+      <${Field} label="Outcome"><${Select} value=${f.outcome} onChange=${v => { set('outcome')(v); suggest(v, f.type); }} options=${OUTCOMES}/><//>
       ${me.role !== 'officer' && html`<${Field} label="Officer"><${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && t.role !== 'telecaller').map(t => ({ value: t.id, label: t.name }))}/><//>`}
-      <${Field} label="Next follow-up *"><input className="input" type="date" required value=${f.next_follow_up} onInput=${set('next_follow_up')}/><//>
       <${Field} label="Remarks *" full><textarea className="input" rows="2" required placeholder="Who you spoke to and what they said" value=${f.remarks} onInput=${set('remarks')}/><//>
     </div>
+    ${closing ? html`<p className="small muted">No next action needed — the school will be marked Not interested.</p>`
+      : html`<div className="card pad" style=${{ background: 'var(--paper)' }}><p className="small" style=${{ margin: '0 0 8px' }}><b>Suggested next step</b> — change it if you agreed something else.</p><${NextAction} actions=${SCHOOL_ACTIONS} value=${nx} onChange=${setNx} required/></div>`}
     ${err && html`<div className="msg bad">${err}</div>`}
     <div><button className="btn primary" disabled=${busy}>${busy ? 'Saving…' : 'Save outreach'}</button></div></form>`;
 }
@@ -492,7 +552,6 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
     const { error } = await db.from('schools').delete().eq('id', id); if (error) toast(nice(error)); else { toast('School deleted'); bump(); onClose(); } };
   if (!s) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
   const nameOf = x => team.find(t => t.id === x)?.name || 'Unassigned';
-  const fs = followState(s.next_follow_up);
   const info = [['School ID', s.code], ['City', s.city + ', ' + s.district], ['Address', s.address], ['Category / board', [s.category, s.board].filter(Boolean).join(' · ')],
     ['Principal', s.principal], ['Coordinator', s.coordinator], ['Phone', s.phone], ['WhatsApp', s.whatsapp], ['Email', s.email], ['Students', s.students],
     ['Officer', nameOf(s.officer_id)], ['Lead source', s.source], ['Last contact', fDate(s.last_contact)], ['Remarks', s.remarks]];
@@ -502,14 +561,14 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
       ${(s.whatsapp || s.phone) && html`<a className="btn" href=${wa(s.whatsapp || s.phone)} target="_blank">${I.wa} WhatsApp</a>`}
       <button className="btn" onClick=${() => editSchool(s)}>Edit</button>
       <button className="btn gold" onClick=${() => scheduleFor(s)}>Schedule programme</button></div>
-    <div className=${'msg ' + (fs === 'overdue' ? 'bad' : fs === 'today' ? 'warn' : 'ok')} style=${{ marginBottom: 16 }}>Next follow-up: <b>${fDate(s.next_follow_up)}</b>${fs === 'overdue' ? ' — overdue' : fs === 'today' ? ' — today' : ''}</div>
+    <${NextBanner} row=${s} actions=${SCHOOL_ACTIONS} closed=${CLOSED.includes(s.status)} onSave=${async v => { const { error } = await db.from('schools').update({ next_action: v.action, next_follow_up: v.date, next_action_time: v.time || null }).eq('id', s.id); if (error) toast(nice(error)); else { toast('Next action saved'); load(); bump(); } }}/>
     <h3 style=${{ marginBottom: 10 }}>Log outreach</h3>
-    <${OutreachForm} me=${me} team=${team} schoolId=${s.id} onSaved=${() => { toast('Outreach saved'); load(); bump(); }}/>
+    <${OutreachForm} key=${s.status} me=${me} team=${team} schoolId=${s.id} status=${s.status} onSaved=${() => { toast('Outreach saved'); load(); bump(); }}/>
     <h3 style=${{ margin: '22px 0 10px' }}>Programmes</h3>
     ${progs.length ? html`<div className="card list">${progs.map(p => html`<div key=${p.id} className="item click" onClick=${() => openProgramme(p.id)}><div className="grow"><b>${fDate(p.date)}, ${fTime(p.start_time)}</b><div className="small muted">${p.code} · ${p.type} · ${p.actual ?? p.expected} students</div></div>${badge(p.status)}</div>`)}</div>`
       : html`<p className="muted small">No programme yet.</p>`}
     <h3 style=${{ margin: '22px 0 10px' }}>History</h3>
-    ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type} · ${h.outcome}</b><div className="small muted">${fDate(h.done_on)} · ${nameOf(h.officer_id)} · next ${fShort(h.next_follow_up)}</div><div className="small">${h.remarks}</div></div>`)}</div>` : html`<p className="muted small">No outreach logged yet.</p>`}
+    ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type} · ${h.outcome}</b><div className="small muted">${fDate(h.done_on)} · ${nameOf(h.officer_id)}${h.next_follow_up ? ' · next: ' + (h.next_action || 'follow-up') + ', ' + whenText(h.next_follow_up, h.next_action_time) : ''}</div><div className="small">${h.remarks}</div></div>`)}</div>` : html`<p className="muted small">No outreach logged yet.</p>`}
     <h3 style=${{ margin: '22px 0 10px' }}>Details</h3>
     <div className="card list">${info.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 120, flex: 'none' }}>${k}</span><span>${v || '—'}</span></div>`)}</div>
     ${me.role === 'admin' && html`<button className="btn danger" style=${{ marginTop: 16 }} onClick=${del}>Delete school</button>`}
@@ -679,7 +738,7 @@ const REPORTS = [
   ['officers', 'Officer performance', 'Schools, calls, visits, meetings, confirmations, programmes, pending follow-ups'],
   ['inout', 'Inbound vs outbound', 'Programmes at AIMER Campus vs at schools, by status and students'],
   ['programmes', 'Upcoming & completed programmes', 'Two sheets: upcoming and completed'],
-  ['followups', 'Follow-ups pending', 'Schools due today or overdue, oldest first'],
+  ['followups', 'Next actions due', 'Schools whose next action is due today or overdue, oldest first'],
   ['outreach', 'Outreach log', 'Every call, visit, meeting and message'],
 ];
 async function buildReport(key, team) {
@@ -690,14 +749,14 @@ async function buildReport(key, team) {
     const S = await fetchAll(() => db.from('schools').select('*').order('district').order('name'));
     if (key === 'schools') return { Schools: S.map(s => ({ 'School ID': s.code, 'School name': s.name, District: s.district, City: s.city, Address: s.address, Category: s.category, Board: s.board,
       Principal: s.principal, Coordinator: s.coordinator, Phone: s.phone, WhatsApp: s.whatsapp, Email: s.email, Students: s.students, Officer: nameOf(s.officer_id),
-      'Lead source': s.source, Status: s.status, 'Last contact': s.last_contact, 'Next follow-up': s.next_follow_up, Remarks: s.remarks })) };
+      'Lead source': s.source, Status: s.status, 'Last contact': s.last_contact, 'Next action': s.next_action, 'Next action date': s.next_follow_up, 'Time': s.next_action_time?.slice(0, 5), Remarks: s.remarks })) };
     if (key === 'district') return { Districts: Object.entries(S.reduce((m, s) => { (m[s.district] ||= []).push(s); return m; }, {})).map(([d, l]) => ({
       District: d, Schools: l.length, Contacted: l.filter(s => s.status !== 'New').length, Interested: l.filter(s => s.status === 'Interested').length,
       Confirmed: l.filter(confirmed).length, 'Programmes completed': l.filter(s => s.status === 'Programme completed').length,
       'Conversion %': Math.round(l.filter(confirmed).length / l.length * 100), 'Student strength': l.reduce((a, s) => a + (s.students || 0), 0) })).sort((a, b) => b.Schools - a.Schools) };
     if (key === 'followups') return { 'Follow-ups pending': S.filter(s => !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up <= today)
       .sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up)).map(s => ({ 'School ID': s.code, School: s.name, District: s.district, Contact: s.coordinator || s.principal, Phone: s.phone,
-        Officer: nameOf(s.officer_id), Status: s.status, 'Last contact': s.last_contact, 'Due': s.next_follow_up, 'Days overdue': Math.round((Date.parse(today) - Date.parse(s.next_follow_up)) / 864e5) })) };
+        Officer: nameOf(s.officer_id), Status: s.status, 'Last contact': s.last_contact, 'Next action': s.next_action, 'Due': s.next_follow_up, Time: s.next_action_time?.slice(0, 5), 'Days overdue': Math.round((Date.parse(today) - Date.parse(s.next_follow_up)) / 864e5) })) };
     const [A, P] = await Promise.all([fetchAll(() => db.from('outreach').select('officer_id,type')), fetchAll(() => db.from('programmes').select('officer_id,status,actual'))]);
     return { Officers: team.filter(t => !['admin','telecaller'].includes(t.role)).map(t => { const mine = S.filter(s => s.officer_id === t.id), a = A.filter(x => x.officer_id === t.id), p = P.filter(x => x.officer_id === t.id && x.status === 'Completed');
       return { Officer: t.name, Active: t.active ? 'Yes' : 'No', Schools: mine.length, Calls: a.filter(x => x.type === 'Call').length, Visits: a.filter(x => x.type === 'School visit').length,
@@ -706,7 +765,7 @@ async function buildReport(key, team) {
         'Pending follow-ups': mine.filter(s => !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up <= today).length }; }) };
   }
   if (key === 'outreach') { const A = await fetchAll(() => db.from('outreach').select('*, schools(code,name,district)').order('done_on', { ascending: false }));
-    return { Outreach: A.map(a => ({ Date: a.done_on, 'School ID': a.schools?.code, School: a.schools?.name, District: a.schools?.district, Activity: a.type, Outcome: a.outcome, Officer: nameOf(a.officer_id), Remarks: a.remarks, 'Next follow-up': a.next_follow_up })) }; }
+    return { Outreach: A.map(a => ({ Date: a.done_on, 'School ID': a.schools?.code, School: a.schools?.name, District: a.schools?.district, Activity: a.type, Outcome: a.outcome, Officer: nameOf(a.officer_id), Remarks: a.remarks, 'Next action': a.next_action, 'Next action date': a.next_follow_up })) }; }
   const P = await fetchAll(() => db.from('programmes').select('*, schools(code,name,district)').order('date'));
   if (key === 'inout') return { 'Inbound vs outbound': P_TYPES.map(t => { const l = P.filter(p => p.type === t), r = { Type: t === 'At AIMER Campus' ? 'Inbound — at AIMER Campus' : 'Outbound — at school', Total: l.length };
     P_STATUSES.forEach(s => r[s] = l.filter(p => p.status === s).length); r['Expected students'] = l.reduce((a, p) => a + p.expected, 0); r['Students attended'] = l.reduce((a, p) => a + (p.actual || 0), 0); return r; }) };
@@ -899,7 +958,7 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
   const load = async () => {
     const today = todayStr();
     const [leads, acts] = await Promise.all([
-      fetchAll(() => db.from('leads').select('id,name,phone,whatsapp,stage,source,campaign,category,school_name,district,telecaller_id,next_follow_up,created_at,paid_at,amount,idea_at,no_answer_count')),
+      fetchAll(() => db.from('leads').select('id,name,phone,whatsapp,stage,source,campaign,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,created_at,paid_at,amount,idea_at,no_answer_count')),
       fetchAll(() => db.from('lead_activities').select('type,outcome,by_user,created_at').gte('created_at', today + 'T00:00:00+05:30')),
     ]);
     setD({ leads, acts, today });
@@ -909,7 +968,7 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
   const { leads, acts, today } = d;
   const paid = leads.filter(l => PAID_STAGES.includes(l.stage));
   const due = leads.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= today)
-    .sort((a, b) => (a.stage === 'New' ? 0 : 1) - (b.stage === 'New' ? 0 : 1) || a.next_follow_up.localeCompare(b.next_follow_up));
+    .sort((a, b) => (a.stage === 'New' ? 0 : 1) - (b.stage === 'New' ? 0 : 1) || byWhen(a, b));
   const callsToday = acts.filter(a => a.type === 'Call');
   const myCalls = callsToday.filter(a => a.by_user === me.id).length;
   const unassigned = leads.filter(l => !l.telecaller_id && !['Not interested','Wrong number'].includes(l.stage)).length;
@@ -917,7 +976,7 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
   const stats = [
     { n: leads.length, l: isMgr ? 'Total leads' : 'My leads', go: {} },
     { n: leads.filter(l => istDate(l.created_at) === today).length, l: 'New today', go: { stage: 'New' } },
-    { n: due.length, l: 'Follow-ups due', go: { follow: 'due' }, alert: due.some(l => l.next_follow_up < today) },
+    { n: due.length, l: 'Next actions due', go: { follow: 'due' }, alert: due.some(l => l.next_follow_up < today) },
     { n: leads.filter(l => l.stage === 'Payment pending').length, l: 'Payment pending', go: { stage: 'Payment pending' } },
     { n: paid.length, l: `Paid · ${inr(paid.reduce((a, l) => a + (+l.amount || 0), 0))}`, go: { stage: 'Paid' } },
     { n: leads.filter(l => ['Idea submitted','Shortlisted'].includes(l.stage)).length, l: 'Ideas submitted', go: { stage: 'Idea submitted' } },
@@ -950,8 +1009,8 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
         ${due.length > 0 && html`<button className="btn sm primary" onClick=${() => openLead(queue[0], queue)}>Start calling (${due.length})</button>`}</div>
         <div className="list">${due.slice(0, 12).map(l => html`<div key=${l.id} className="item">
           <div className="grow click" onClick=${() => openLead(l.id, queue)}><div className="row" style=${{ gap: 6 }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
-            <div className="trunc small muted">${[l.category, l.school_name, l.source].filter(Boolean).join(' · ')}${isMgr ? ' · ' + (team.find(t => t.id === l.telecaller_id)?.name || 'Unassigned') : ''}</div></div>
-          <span className=${'small ' + (l.next_follow_up < today ? 'bad' : 'warn')} style=${{ fontWeight: 700 }}>${l.stage === 'New' ? 'New' : l.next_follow_up < today ? fShort(l.next_follow_up) : 'Today'}</span>
+            <div className="trunc small"><b>${l.next_action || 'Follow-up call'}</b> <span className="muted">· ${[l.category, l.source].filter(Boolean).join(' · ')}${isMgr ? ' · ' + (team.find(t => t.id === l.telecaller_id)?.name || 'Unassigned') : ''}</span></div></div>
+          <span className=${'small ' + (l.next_follow_up < today ? 'bad' : 'warn')} style=${{ fontWeight: 700, textAlign: 'right' }}>${l.next_follow_up < today ? fShort(l.next_follow_up) : l.next_action_time ? fTime(l.next_action_time) : 'Today'}</span>
           <a className="icon" href=${tel(l.phone)} aria-label="Call">${I.phone}</a>
           <a className="icon ok" href=${wa(l.whatsapp || l.phone)} target="_blank" aria-label="WhatsApp">${I.wa}</a></div>`)}
         ${!due.length && html`<p className="pad muted small">Nothing due right now. Great work.</p>`}</div></div>
@@ -986,7 +1045,7 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
   useEffect(() => {
     let alive = true;
     const t = setTimeout(async () => {
-      let x = db.from('leads').select('id,code,name,phone,stage,source,category,school_name,district,telecaller_id,next_follow_up,last_contact,created_at', { count: 'exact' });
+      let x = db.from('leads').select('id,code,name,phone,stage,source,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,last_contact,created_at', { count: 'exact' });
       const s = clean(q); if (s) x = x.or(`name.ilike.%${s}%,phone.ilike.%${s}%,code.ilike.%${s}%,school_name.ilike.%${s}%,email.ilike.%${s}%`);
       if (stage) x = x.eq('stage', stage); if (source) x = x.eq('source', source); if (cat) x = x.eq('category', cat);
       if (owner === 'none') x = x.is('telecaller_id', null); else if (owner) x = x.eq('telecaller_id', owner);
@@ -1015,7 +1074,7 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
     <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', marginBottom: 14 }}>
       <input className="input" placeholder="Search name, phone, ID, school…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
       <${Select} value=${stage} onChange=${setStage} options=${LEAD_STAGES} blank="All stages" aria-label="Stage"/>
-      <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'due', label: 'Follow-up due' }, { value: 'today', label: 'Due today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any follow-up" aria-label="Follow-up"/>
+      <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'due', label: 'Next action due' }, { value: 'today', label: 'Due today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any next action" aria-label="Next action"/>
       <${Select} value=${source} onChange=${setSource} options=${LEAD_SOURCES} blank="All sources" aria-label="Source"/>
       <${Select} value=${cat} onChange=${setCat} options=${LEAD_CATS} blank="All grades" aria-label="Grade"/>
       ${isMgr && html`<${Select} value=${owner} onChange=${setOwner} options=${[{ value: 'none', label: 'Unassigned' }, ...callers(team).map(t => ({ value: t.id, label: t.name }))]} blank="All telecallers" aria-label="Telecaller"/>`}
@@ -1024,15 +1083,15 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
       <div className="card list hide-lg">${rows.map(l => html`<div key=${l.id} className="item click" onClick=${() => openLead(l.id, ids)}>
         <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
           <div className="small muted">${[l.category, l.school_name, l.source].filter(Boolean).join(' · ')}</div>
-          <div className="small">Follow-up: <b className=${followState(l.next_follow_up) === 'overdue' && !NO_FOLLOW.includes(l.stage) ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}>${NO_FOLLOW.includes(l.stage) ? '—' : fDate(l.next_follow_up)}</b>${isMgr ? html`<span className="muted"> · ${nameOf(l.telecaller_id)}</span>` : ''}</div></div></div>`)}</div>
-      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${sel.length === rows.length} onChange=${e => setSel(e.target.checked ? ids : [])}/></th>`}<th>Lead</th><th>Grade / school</th><th>Source</th><th>Stage</th>${isMgr && html`<th>Telecaller</th>`}<th>Last contact</th><th>Follow-up</th></tr></thead>
+          <div className="small">Next: ${NO_FOLLOW.includes(l.stage) || !l.next_follow_up ? '—' : html`<b>${l.next_action || 'Follow-up'}</b> · <b className=${followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(l.next_follow_up, l.next_action_time)}</b>`}${isMgr ? html`<span className="muted"> · ${nameOf(l.telecaller_id)}</span>` : ''}</div></div></div>`)}</div>
+      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${sel.length === rows.length} onChange=${e => setSel(e.target.checked ? ids : [])}/></th>`}<th>Lead</th><th>Grade / school</th><th>Source</th><th>Stage</th>${isMgr && html`<th>Telecaller</th>`}<th>Last contact</th><th>Next action</th></tr></thead>
         <tbody>${rows.map(l => html`<tr key=${l.id} className="click" onClick=${() => openLead(l.id, ids)}>
           ${isMgr && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + l.name} checked=${sel.includes(l.id)} onChange=${e => setSel(e.target.checked ? [...sel, l.id] : sel.filter(x => x !== l.id))}/></td>`}
           <td><b>${l.name}</b><div className="small muted">${l.code} · ${l.phone}</div></td>
           <td>${l.category || '—'}<div className="small muted">${l.school_name || ''}</div></td>
           <td className="small">${l.source}</td><td>${badge(l.stage)}</td>${isMgr && html`<td className="small">${nameOf(l.telecaller_id)}</td>`}
           <td className="small">${fDate(l.last_contact)}</td>
-          <td className=${NO_FOLLOW.includes(l.stage) ? 'muted' : followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}><b>${NO_FOLLOW.includes(l.stage) ? '—' : fDate(l.next_follow_up)}</b></td></tr>`)}</tbody></table></div>
+          <td>${NO_FOLLOW.includes(l.stage) || !l.next_follow_up ? html`<span className="muted">—</span>` : html`<div className="small">${l.next_action || 'Follow-up'}</div><b className=${'small ' + (followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : '')}>${whenText(l.next_follow_up, l.next_action_time)}</b>`}</td></tr>`)}</tbody></table></div>
       ${isMgr && sel.length > 0 && html`<div className="row hide-sm" style=${{ marginTop: 10 }}><span className="small"><b>${sel.length} selected</b> — assign to</span>
         <${Select} value="" onChange=${assign} options=${[{ value: 'none', label: 'Unassigned' }, ...callers(team).map(t => ({ value: t.id, label: t.name }))].map(o => o.value === 'none' ? { value: '', label: 'Unassigned' } : o)} blank="Choose…" style=${{ width: 220 }}/></div>`}
       <div className="row" style=${{ justifyContent: 'space-between', marginTop: 12 }}><span className="small muted">Page ${page + 1} of ${pages}</span>
@@ -1050,9 +1109,10 @@ function LeadForm({ me, team, lead, onClose, onSaved }) {
     setBusy(true);
     const row = { name: f.name?.trim(), phone: f.phone?.trim(), whatsapp: f.whatsapp || null, email: f.email ? f.email.trim().toLowerCase() : null,
       category: f.category || null, school_name: f.school_name || null, district: f.district || null, city: f.city || null, parent_name: f.parent_name || null,
-      source: f.source || 'Other', campaign: f.campaign || null, remarks: f.remarks || null, next_follow_up: f.next_follow_up || null };
+      source: f.source || 'Other', campaign: f.campaign || null, remarks: f.remarks || null, next_follow_up: f.next_follow_up || null, next_action: f.next_action || null, next_action_time: f.next_action_time || null };
     if (isMgr && (!lead || f.telecaller_id !== lead.telecaller_id)) row.telecaller_id = f.telecaller_id || null;
     if (!lead && !row.next_follow_up) delete row.next_follow_up;
+    if (!lead && !row.next_action) delete row.next_action;
     const res = lead ? await db.from('leads').update(row).eq('id', lead.id).select('id').single() : await db.from('leads').insert(row).select('id').single();
     setBusy(false);
     if (res.error) setErr(nice(res.error)); else onSaved(res.data.id);
@@ -1071,7 +1131,9 @@ function LeadForm({ me, team, lead, onClose, onSaved }) {
       <${Field} label="Lead source"><${Select} value=${f.source} onChange=${set('source')} options=${LEAD_SOURCES}/><//>
       <${Field} label="Campaign / ad / programme"><input className="input" value=${f.campaign || ''} onInput=${set('campaign')} placeholder="e.g. YCEO Nov Reels"/><//>
       ${isMgr && html`<${Field} label="Telecaller"><${Select} value=${f.telecaller_id} onChange=${set('telecaller_id')} options=${callers(team).map(t => ({ value: t.id, label: t.name }))} blank=${lead ? 'Unassigned' : 'Auto (in turn)'}/><//>`}
-      <${Field} label="Next follow-up"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
+      <${Field} label="Next action"><${Select} value=${f.next_action} onChange=${set('next_action')} options=${LEAD_ACTIONS} blank=${lead ? '—' : 'First call, today (default)'}/><//>
+      <div className="row" style=${{ flexWrap: 'nowrap', gap: 6, alignItems: 'flex-end' }}><${Field} label="Date"><input className="input" type="date" value=${f.next_follow_up || ''} onInput=${set('next_follow_up')}/><//>
+        <${Field} label="Time"><input className="input" type="time" value=${(f.next_action_time || '').slice(0, 5)} onInput=${set('next_action_time')} style=${{ width: 116 }}/><//></div>
       <${Field} label="Remarks" full><textarea className="input" rows="2" value=${f.remarks || ''} onInput=${set('remarks')}/><//>
       ${err && html`<div className="msg bad full">${err}</div>`}
       <div className="row full"><button className="btn primary" disabled=${busy}>${busy ? 'Saving…' : lead ? 'Save changes' : 'Add lead'}</button><button type="button" className="btn" onClick=${onClose}>Cancel</button></div>
@@ -1082,7 +1144,7 @@ function LeadForm({ me, team, lead, onClose, onSaved }) {
 function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, bump }) {
   const isMgr = me.role !== 'telecaller';
   const [l, setL] = useState(null); const [hist, setHist] = useState([]); const [panel, setPanel] = useState('call');
-  const [out, setOut] = useState(''); const [remarks, setRemarks] = useState(''); const [next, setNext] = useState(addDays(todayStr(), 1));
+  const [out, setOut] = useState(''); const [remarks, setRemarks] = useState(''); const [nx, setNx] = useState({ action: '', date: addDays(todayStr(), 1), time: '' });
   const [pay, setPay] = useState({ amount: fee(), ref: '', date: todayStr(), mode: 'UPI' });
   const [idea, setIdea] = useState({ title: '', link: '', date: todayStr() });
   const [busy, setBusy] = useState(false);
@@ -1092,7 +1154,8 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, b
     if (a.error) { toast('This lead isn’t available to you.'); return onClose(); }
     setL(a.data); setHist(b.data || []);
   };
-  useEffect(() => { setL(null); setOut(''); setRemarks(''); setNext(addDays(todayStr(), 1)); setPanel('call'); load(); }, [id]);
+  useEffect(() => { setL(null); setOut(''); setRemarks(''); setNx({ action: '', date: addDays(todayStr(), 1), time: '' }); setPanel('call'); load(); }, [id]);
+  const pickOutcome = o => { setOut(o); const [a, d, t] = suggestLead(o, l); setNx({ action: a || '', date: d || '', time: t || '' }); };
   if (!l) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
   const nameOf = x => team.find(t => t.id === x)?.name || (x ? 'Team member' : 'System');
   const pos = queue ? queue.indexOf(id) : -1, nextId = pos >= 0 ? queue[pos + 1] : null;
@@ -1101,29 +1164,32 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, b
 
   const logCall = async () => {
     if (!out) return toast('Pick what happened on the call');
+    if (!closing && (!nx.action || !nx.date)) return toast('Choose the next action and its date');
     setBusy(true);
-    const { error } = await db.from('lead_activities').insert({ lead_id: l.id, type: 'Call', outcome: out, remarks: remarks.trim() || null, next_follow_up: closing ? null : next, by_user: me.id });
+    const { error } = await db.from('lead_activities').insert({ lead_id: l.id, type: 'Call', outcome: out, remarks: remarks.trim() || null,
+      next_follow_up: closing ? null : nx.date, next_action: closing ? null : nx.action, next_action_time: closing || !nx.time ? null : nx.time, by_user: me.id });
     setBusy(false);
     if (error) return toast(nice(error));
-    setOut(''); setRemarks(''); setNext(addDays(todayStr(), 1));
+    setOut(''); setRemarks(''); setNx({ action: '', date: addDays(todayStr(), 1), time: '' });
     if (nextId) { toast('Saved — next lead'); bump(); openLead(nextId, queue); } else done('Call saved');
   };
   const sendPayLink = async () => {
     window.open(waText(l.whatsapp || l.phone, payMsg(l, me)), '_blank');
     if (!PAID_STAGES.includes(l.stage) && l.stage !== 'Payment pending') await db.from('leads').update({ stage: 'Payment pending' }).eq('id', l.id);
-    await db.from('lead_activities').insert({ lead_id: l.id, type: 'WhatsApp', remarks: 'Payment link sent', next_follow_up: addDays(todayStr(), 1), by_user: me.id });
+    const [cd, ct] = laterToday(4);
+    await db.from('lead_activities').insert({ lead_id: l.id, type: 'WhatsApp', remarks: 'Payment link sent', next_follow_up: cd, next_action: 'Check payment', next_action_time: ct, by_user: me.id });
     done('Marked as payment pending');
   };
   const markPaid = async () => {
     if (!pay.ref.trim()) return toast('Enter the transaction / UTR ID');
     setBusy(true);
-    const { error } = await db.from('leads').update({ stage: 'Paid', amount: +pay.amount || fee(), payment_ref: pay.ref.trim(), paid_at: pay.date, payment_mode: pay.mode, next_follow_up: addDays(todayStr(), 3) }).eq('id', l.id);
+    const { error } = await db.from('leads').update({ stage: 'Paid', amount: +pay.amount || fee(), payment_ref: pay.ref.trim(), paid_at: pay.date, payment_mode: pay.mode, next_follow_up: todayStr(), next_action: 'Send idea form', next_action_time: null }).eq('id', l.id);
     if (!error) await db.from('lead_activities').insert({ lead_id: l.id, type: 'Payment', remarks: `${inr(pay.amount)} via ${pay.mode} · Ref ${pay.ref.trim()}`, by_user: me.id });
     setBusy(false); if (error) toast(nice(error)); else { setPanel('idea'); done('Payment recorded 🎉'); }
   };
   const markIdea = async () => {
     setBusy(true);
-    const { error } = await db.from('leads').update({ stage: 'Idea submitted', idea_title: idea.title.trim() || null, idea_link: idea.link.trim() || null, idea_at: idea.date, next_follow_up: null }).eq('id', l.id);
+    const { error } = await db.from('leads').update({ stage: 'Idea submitted', idea_title: idea.title.trim() || null, idea_link: idea.link.trim() || null, idea_at: idea.date, next_follow_up: null, next_action: null, next_action_time: null }).eq('id', l.id);
     if (!error) await db.from('lead_activities').insert({ lead_id: l.id, type: 'Idea', remarks: idea.title.trim() || 'Idea submitted', by_user: me.id });
     setBusy(false); if (error) toast(nice(error)); else done('Idea marked as submitted');
   };
@@ -1144,9 +1210,10 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, b
       <a className="btn primary" href=${tel(l.phone)}>${I.phone} Call ${l.phone}</a>
       <a className="btn" href=${wa(l.whatsapp || l.phone)} target="_blank">${I.wa} WhatsApp</a>
       ${!PAID_STAGES.includes(l.stage) && html`<button className="btn gold" onClick=${sendPayLink}>Send payment link</button>`}
-      ${PAID_STAGES.includes(l.stage) && !l.idea_at && html`<a className="btn gold" href=${waText(l.whatsapp || l.phone, ideaMsg(l, me))} target="_blank">Send idea form</a>`}
+      ${PAID_STAGES.includes(l.stage) && !l.idea_at && html`<a className="btn gold" href=${waText(l.whatsapp || l.phone, ideaMsg(l, me))} target="_blank" onClick=${() => db.from('lead_activities').insert({ lead_id: l.id, type: 'WhatsApp', remarks: 'Idea form sent', next_follow_up: addDays(todayStr(), 2), next_action: 'Check idea submission', by_user: me.id }).then(() => done('Idea form sent — check back in 2 days'))}>Send idea form</a>`}
       ${nextId && html`<button className="btn" onClick=${() => openLead(nextId, queue)}>Skip ›</button>`}
     </div>
+    <${NextBanner} row=${l} actions=${LEAD_ACTIONS} closed=${NO_FOLLOW.includes(l.stage)} onSave=${async v => { const { error } = await db.from('leads').update({ next_action: v.action, next_follow_up: v.date, next_action_time: v.time || null }).eq('id', l.id); if (error) toast(nice(error)); else done('Next action saved'); }}/>
     <div className="row" style=${{ gap: 4, marginBottom: 16, flexWrap: 'wrap' }} aria-label="Progress">
       ${PIPELINE.map((s, i) => html`<span key=${s} className="small" style=${{ padding: '3px 9px', borderRadius: 99, fontWeight: 600,
         background: i <= stepIdx ? (i >= 4 ? 'color-mix(in srgb,var(--ok) 16%,transparent)' : 'var(--brand-tint)') : 'var(--paper)',
@@ -1156,12 +1223,12 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, b
 
     <div className="seg" style=${{ marginBottom: 12 }}>${tabs.map(([k, t]) => html`<button key=${k} className=${panel === k ? 'on' : ''} onClick=${() => setPanel(k)}>${t}</button>`)}</div>
     ${panel === 'call' && html`<div className="card pad" style=${{ marginBottom: 16 }}>
-      <div className="chips" role="radiogroup" aria-label="Call outcome">${CALL_OUTCOMES.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${out === o} className=${'chip' + (out === o ? ' on' : '')} onClick=${() => setOut(o)}>${o}</button>`)}</div>
+      <div className="chips" role="radiogroup" aria-label="Call outcome">${CALL_OUTCOMES.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${out === o} className=${'chip' + (out === o ? ' on' : '')} onClick=${() => pickOutcome(o)}>${o}</button>`)}</div>
       <div className="form two" style=${{ marginTop: 12 }}>
         <${Field} label="Remarks" full><textarea className="input" rows="2" value=${remarks} onInput=${e => setRemarks(e.target.value)} placeholder="What did they say?"/><//>
-        ${!closing && html`<${Field} label="Next follow-up"><div className="row" style=${{ flexWrap: 'nowrap' }}><input className="input" type="date" value=${next} onInput=${e => setNext(e.target.value)}/>
-          <button type="button" className="btn sm" onClick=${() => setNext(todayStr())}>Today</button><button type="button" className="btn sm" onClick=${() => setNext(addDays(todayStr(), 2))}>+2d</button></div><//>`}
       </div>
+      ${out && !closing && html`<div style=${{ marginTop: 12 }}><p className="small" style=${{ margin: '0 0 8px' }}><b>Suggested next step</b> — change it if you agreed something else.</p><${NextAction} actions=${LEAD_ACTIONS} value=${nx} onChange=${setNx} required/></div>`}
+      ${closing && html`<p className="small muted" style=${{ marginTop: 10 }}>No next action — this lead will be closed as ${out}.</p>`}
       <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${logCall}>${busy ? 'Saving…' : nextId ? 'Save & next lead' : 'Save call'}</button>
       ${l.no_answer_count > 0 && !PAID_STAGES.includes(l.stage) && html`<span className="small muted" style=${{ marginLeft: 10 }}>${l.no_answer_count} unanswered in a row${l.no_answer_count >= 2 ? ' — one more moves it to Not reachable' : ''}</span>`}
     </div>`}
@@ -1183,7 +1250,7 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, toast, b
 
     <h3 style=${{ marginBottom: 10 }}>History</h3>
     ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type}${h.outcome ? ' · ' + h.outcome : ''}</b>
-      <div className="small muted">${fDateTime(h.created_at)} · ${nameOf(h.by_user)}${h.next_follow_up ? ' · next ' + fShort(h.next_follow_up) : ''}</div>${h.remarks && html`<div className="small">${h.remarks}</div>`}</div>`)}</div>` : html`<p className="muted small">No activity yet. Make the first call.</p>`}
+      <div className="small muted">${fDateTime(h.created_at)} · ${nameOf(h.by_user)}${h.next_follow_up ? ' · next: ' + (h.next_action || 'follow-up') + ', ' + whenText(h.next_follow_up, h.next_action_time) : ''}</div>${h.remarks && html`<div className="small">${h.remarks}</div>`}</div>`)}</div>` : html`<p className="muted small">No activity yet. Make the first call.</p>`}
     <h3 style=${{ margin: '20px 0 10px' }}>Details</h3>
     <div className="card list">${info.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 110, flex: 'none' }}>${k}</span><span style=${{ wordBreak: 'break-word' }}>${v || '—'}</span></div>`)}</div>
     <div className="row" style=${{ marginTop: 14 }}><button className="btn" onClick=${() => editLead(l)}>Edit details</button>${me.role === 'admin' && html`<button className="btn danger" onClick=${del}>Delete lead</button>`}</div>
@@ -1267,7 +1334,7 @@ const LEAD_REPORTS = [
   ['callers', 'Telecaller performance', 'Leads, calls, contacted, paid and conversion per telecaller'],
   ['payments', 'Payments', 'Every ₹' + (window.CRM_CONFIG.REG_FEE || 299) + ' registration with transaction ID — for accounts'],
   ['sources', 'Sources & campaigns', 'Which sources and campaigns bring paid participants'],
-  ['due', 'Follow-ups due', 'Open leads due today or overdue, oldest first'],
+  ['due', 'Next actions due', 'Open leads whose next action is due today or overdue'],
 ];
 async function buildLeadReport(key, team, range) {
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
@@ -1275,14 +1342,14 @@ async function buildLeadReport(key, team, range) {
   const L = (await fetchAll(() => db.from('leads').select('*').order('created_at', { ascending: false }))).filter(l => inRange(l.created_at));
   if (key === 'all') return { Leads: L.map(l => ({ 'Lead ID': l.code, Name: l.name, Phone: l.phone, WhatsApp: l.whatsapp, Email: l.email, Grade: l.category, School: l.school_name,
     District: l.district, City: l.city, Parent: l.parent_name, Source: l.source, Campaign: l.campaign, Stage: l.stage, Telecaller: nameOf(l.telecaller_id),
-    'Last contact': l.last_contact, 'Next follow-up': l.next_follow_up, 'Paid on': l.paid_at, Amount: l.amount ? +l.amount : null, 'Payment ref': l.payment_ref,
+    'Last contact': l.last_contact, 'Next action': l.next_action, 'Next action date': l.next_follow_up, Time: l.next_action_time?.slice(0, 5), 'Paid on': l.paid_at, Amount: l.amount ? +l.amount : null, 'Payment ref': l.payment_ref,
     'Payment mode': l.payment_mode, Idea: l.idea_title, 'Idea link': l.idea_link, 'Idea date': l.idea_at, Added: istDate(l.created_at), Remarks: l.remarks })) };
   if (key === 'payments') { const P = L.filter(l => l.paid_at).sort((a, b) => b.paid_at.localeCompare(a.paid_at));
     const rows = P.map(l => ({ 'Paid on': l.paid_at, 'Lead ID': l.code, Name: l.name, Phone: l.phone, School: l.school_name, Amount: +l.amount || 0, Mode: l.payment_mode, 'Transaction ID': l.payment_ref, Telecaller: nameOf(l.telecaller_id), Stage: l.stage }));
     if (rows.length) rows.push({ 'Paid on': 'TOTAL', Name: `${rows.length} payments`, Amount: rows.reduce((a, r) => a + r.Amount, 0) });
     return { Payments: rows }; }
   if (key === 'due') { const t = todayStr(); return { 'Follow-ups due': L.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= t).sort((a, b) => a.next_follow_up.localeCompare(b.next_follow_up))
-    .map(l => ({ 'Lead ID': l.code, Name: l.name, Phone: l.phone, Stage: l.stage, Telecaller: nameOf(l.telecaller_id), 'Last contact': l.last_contact, Due: l.next_follow_up, 'Days overdue': Math.round((Date.parse(t) - Date.parse(l.next_follow_up)) / 864e5) })) }; }
+    .map(l => ({ 'Lead ID': l.code, Name: l.name, Phone: l.phone, Stage: l.stage, Telecaller: nameOf(l.telecaller_id), 'Last contact': l.last_contact, 'Next action': l.next_action, Due: l.next_follow_up, Time: l.next_action_time?.slice(0, 5), 'Days overdue': Math.round((Date.parse(t) - Date.parse(l.next_follow_up)) / 864e5) })) }; }
   if (key === 'sources') { const g = (k) => Object.entries(L.reduce((m, l) => { const x = l[k] || '(none)'; (m[x] ||= []).push(l); return m; }, {}))
       .map(([x, v]) => { const p = v.filter(l => PAID_STAGES.includes(l.stage)); return { [k === 'source' ? 'Source' : 'Campaign']: x, Leads: v.length, Contacted: v.filter(l => l.stage !== 'New').length, Paid: p.length, 'Conversion %': Math.round(p.length / v.length * 100), Revenue: p.reduce((a, l) => a + (+l.amount || 0), 0), 'Ideas submitted': v.filter(l => ['Idea submitted','Shortlisted'].includes(l.stage)).length }; }).sort((a, b) => b.Leads - a.Leads);
     return { Sources: g('source'), Campaigns: g('campaign') }; }
@@ -1372,7 +1439,7 @@ document.getElementById('yceo-form').addEventListener('submit', async (e) => {
     </div>
 
     <div className="card pad" style=${{ marginBottom: 16 }}>
-      <h2>Meta Lead Ads → CRM (automatic)</h2>
+      <h2>Meta Lead Ads → CRM via Make.com (easiest)</h2>
       <p className="small soft">Each new lead from your Facebook / Instagram lead form appears here within a minute. Set up once in Make.com (free plan is enough to start) — Zapier and n8n work the same way.</p>
       <ol className="small" style=${{ paddingLeft: 18, lineHeight: 1.7 }}>
         <li>Make.com → <b>Create a new scenario</b>.</li>
@@ -1384,6 +1451,18 @@ document.getElementById('yceo-form').addEventListener('submit', async (e) => {
       </ol>
       <${Field} label="Request body (JSON)"><${Code} text=${body(show && key ? key : 'YOUR-INTAKE-KEY')} label="Body"/><//>
       <p className="small muted" style=${{ marginTop: 8 }}>Only p_key, p_name and p_phone are required. Same phone number twice = no duplicate; it's noted on the existing lead.</p>
+    </div>
+
+    <div className="card pad" style=${{ marginBottom: 16 }}>
+      <h2>Meta Lead Ads → CRM, direct (no Make or Zapier)</h2>
+      <p className="small soft">Meta sends each lead straight to your Supabase project — free, no monthly limit, instant. One-time setup takes about 30 minutes and needs admin access to the AIMER Facebook page and Business Manager. Full steps are in <b>META-DIRECT-SETUP.md</b>.</p>
+      <ol className="small" style=${{ paddingLeft: 18, lineHeight: 1.7 }}>
+        <li>Supabase → <b>Edge Functions</b> → Deploy new function → Via editor → name <code>meta-leads</code> → paste <b>supabase-function-meta-leads.ts</b> → Deploy. Then turn <b>off "Verify JWT"</b> for it.</li>
+        <li>Supabase → Edge Functions → <b>Secrets</b>: add <code>META_VERIFY_TOKEN</code> (any phrase), <code>META_APP_SECRET</code> and <code>META_PAGE_TOKEN</code>.</li>
+        <li>developers.facebook.com → your app → <b>Webhooks</b> → Page → Callback URL below + the same verify token → subscribe to <b>leadgen</b>.</li>
+        <li>Connect the AIMER page to the app, allow the app in <b>Leads Access</b>, then test with Meta's <b>Lead Ads Testing Tool</b>.</li>
+      </ol>
+      <${Field} label="Webhook callback URL"><${Code} text=${C.SUPABASE_URL.replace(/\/$/, '') + '/functions/v1/meta-leads'} label="Callback URL"/><//>
     </div>
 
     <div className="card pad">

@@ -279,8 +279,9 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
   ];
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
   const officers = team.filter(t => t.role !== 'admin' && t.active).map(t => {
+    const roleTag = t.role === 'coordinator' ? ' (Coordinator)' : t.role === 'manager' ? ' (Manager)' : '';
     const mine = schools.filter(s => s.officer_id === t.id), a = acts.filter(x => x.officer_id === t.id);
-    return { id: t.id, name: t.name, schools: mine.length, calls: a.filter(x => x.type === 'Call').length,
+    return { id: t.id, name: t.name + roleTag, schools: mine.length, calls: a.filter(x => x.type === 'Call').length,
       visits: a.filter(x => x.type === 'School visit').length, meetings: a.filter(x => x.type.includes('meeting')).length,
       confirmed: mine.filter(confirmed).length, done: done.filter(p => p.officer_id === t.id).length,
       pending: mine.filter(s => open(s) && s.next_follow_up && s.next_follow_up <= today).length };
@@ -290,7 +291,7 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
   const maxD = Math.max(1, ...districts.map(x => x.n));
 
   return html`
-    <div className="head"><div><h1>Hello, ${me.name.split(' ')[0]}</h1><p>${isMgr ? 'Outreach across every officer and district.' : 'Your schools and follow-ups.'}</p></div>
+    <div className="head"><div><h1>Hello, ${me.name.split(' ')[0]}</h1><p>${me.role === 'coordinator' ? 'Calls and follow-ups across the whole team.' : isMgr ? 'Outreach across every officer and district.' : 'Your schools and follow-ups.'}</p></div>
       <div className="row"><button className="btn gold" onClick=${() => go('schools', { add: true })}>+ Add school</button><button className="btn" onClick=${() => go('programmes', { add: true })}>Schedule programme</button></div></div>
 
     <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert && s.n ? ' alert' : '')} onClick=${() => go(s.tab || 'schools', s.go || {})}>
@@ -574,7 +575,7 @@ function SchoolPicker({ value, onPick }) {
 function ProgrammeForm({ me, team, programme, school, onClose, onSaved }) {
   const isMgr = me.role !== 'officer';
   const [sch, setSch] = useState(school || (programme && programme.schools ? { id: programme.school_id, ...programme.schools } : null));
-  const [f, set, setF] = useForm(programme || { type: 'At AIMER Campus', venue: C.CAMPUS_VENUE, address: C.CAMPUS_ADDRESS, start_time: '10:00', end_time: '12:30', status: 'Tentative', officer_id: school?.officer_id || me.id });
+  const [f, set, setF] = useForm(programme || { type: 'At AIMER Campus', venue: C.CAMPUS_VENUE, address: C.CAMPUS_ADDRESS, start_time: '10:00', end_time: '12:30', status: 'Tentative', officer_id: school?.officer_id || (me.role === 'coordinator' ? '' : me.id) });
   const [clash, setClash] = useState([]); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [anyway, setAnyway] = useState(false);
   const pickType = t => setF(p => ({ ...p, type: t, ...(t === 'At AIMER Campus' ? { venue: C.CAMPUS_VENUE, address: C.CAMPUS_ADDRESS } : { venue: sch?.name || '', address: [sch?.address, sch?.city, sch?.district].filter(Boolean).join(', ') }) }));
   const pickSchool = s => { setSch(s); if (s) setF(p => ({ ...p, coordinator: p.coordinator || s.coordinator || '', officer_id: s.officer_id || p.officer_id, ...(p.type === 'At school' ? { venue: s.name, address: [s.address, s.city, s.district].filter(Boolean).join(', ') } : {}) })); };
@@ -607,7 +608,7 @@ function ProgrammeForm({ me, team, programme, school, onClose, onSaved }) {
       <div className="form two" style=${{ gap: 10 }}><${Field} label="Starts *"><input className="input" type="time" required value=${(f.start_time || '').slice(0, 5)} onInput=${set('start_time')}/><//>
         <${Field} label="Ends *"><input className="input" type="time" required value=${(f.end_time || '').slice(0, 5)} onInput=${set('end_time')}/><//></div>
       <${Field} label="Expected students *"><input className="input" type="number" min="1" required value=${f.expected ?? ''} onInput=${set('expected')}/><//>
-      <${Field} label="Outreach officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active).map(t => ({ value: t.id, label: t.name }))}/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
+      <${Field} label="Outreach officer">${isMgr ? html`<${Select} value=${f.officer_id} onChange=${set('officer_id')} options=${team.filter(t => t.active && t.role !== 'coordinator').map(t => ({ value: t.id, label: t.name }))} blank="Choose…" required/>` : html`<input className="input" disabled value=${me.name}/>`}<//>
       <${Field} label="School coordinator"><input className="input" value=${f.coordinator || ''} onInput=${set('coordinator')}/><//>
       <${Field} label="Status"><${Select} value=${f.status} onChange=${set('status')} options=${P_STATUSES.filter(s => s !== 'Completed')}/><//>
       <${Field} label="Internal notes" full><textarea className="input" rows="2" value=${f.notes || ''} onInput=${set('notes')} placeholder="Transport, speakers, materials…"/><//>
@@ -785,7 +786,7 @@ function BulkUpload({ team, onClose, onDone }) {
 /* ====================================================================
    9. TEAM (admin) — add, remove, reset passwords; saved in Supabase
    ==================================================================== */
-const ROLE_OPTS = [{ value: 'officer', label: 'Outreach Officer' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
+const ROLE_OPTS = [{ value: 'officer', label: 'Outreach Officer' }, { value: 'coordinator', label: 'Marketing Coordinator' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
 const suggestPw = () => 'Aimer@' + Math.floor(1000 + Math.random() * 9000);
 function AddMember({ onClose, onSaved, toast }) {
   const [f, set] = useForm({ name: '', email: '', phone: '', role: 'officer', password: suggestPw() });
@@ -837,16 +838,16 @@ function Team({ me, team, reloadTeam, toast }) {
     <td><input className="input" defaultValue=${t.name} onBlur=${e => e.target.value.trim() && e.target.value.trim() !== t.name && save(t, { name: e.target.value.trim() })} aria-label="Name" disabled=${!t.active}/></td>
     <td className="small">${t.email}</td>
     <td><input className="input" defaultValue=${t.phone || ''} onBlur=${e => e.target.value !== (t.phone || '') && save(t, { phone: e.target.value || null })} aria-label="Phone" disabled=${!t.active}/></td>
-    <td><${Select} value=${t.role} onChange=${v => save(t, { role: v })} options=${ROLE_OPTS} aria-label="Role" disabled=${!t.active || t.id === me.id}/></td>
+    <td><${Select} value=${t.role} onChange=${v => save(t, { role: v })} options=${ROLE_OPTS} aria-label="Role" disabled=${!t.active || t.id === me.id} style=${{ minWidth: 200 }}/></td>
     <td style=${{ whiteSpace: 'nowrap' }}>${t.active ? html`<button className="btn sm" onClick=${() => setModal({ k: 'pw', t })}>Password</button>
       ${t.id !== me.id && html` <button className="btn sm danger" onClick=${() => setActive(t, false)}>Remove</button>`}`
       : html`<button className="btn sm" onClick=${() => setActive(t, true)}>Restore</button>`}</td></tr>`;
   return html`
-    <div className="head"><div><h1>Team</h1><p>${active.filter(t => t.role === 'officer').length} officers · ${active.filter(t => t.role === 'manager').length} managers · ${active.filter(t => t.role === 'admin').length} admins</p></div>
+    <div className="head"><div><h1>Team</h1><p>${active.filter(t => t.role === 'officer').length} officers · ${active.filter(t => t.role === 'coordinator').length} coordinators · ${active.filter(t => t.role === 'manager').length} managers · ${active.filter(t => t.role === 'admin').length} admins</p></div>
       <button className="btn gold" onClick=${() => setModal({ k: 'add' })}>+ Add member</button></div>
     <div className="card scroll"><table><thead><tr><th>Name</th><th>Email (login)</th><th>Phone</th><th>Role</th><th></th></tr></thead>
       <tbody>${active.map(row)}${!active.length && html`<tr><td colSpan="5" className="muted">No members yet.</td></tr>`}</tbody></table></div>
-    <p className="soft small">Officer = only their own schools · Manager = all schools, reassign, reports, bulk upload · Admin = everything, including this page. Name, phone and role save as soon as you change them.</p>
+    <p className="soft small">Outreach Officer = only their own schools, visits and calls · Marketing Coordinator = all schools, calls and follow-ups for the whole team, reassign, reports, bulk upload (no school visits) · Manager = same access as Coordinator · Admin = everything, including this page. Name, phone and role save as soon as you change them.</p>
     ${removed.length > 0 && html`<button className="btn sm" style=${{ marginTop: 6 }} onClick=${() => setShowOld(!showOld)}>${showOld ? 'Hide' : 'Show'} removed members (${removed.length})</button>
       ${showOld && html`<div className="card scroll" style=${{ marginTop: 10, opacity: .8 }}><table><tbody>${removed.map(row)}</tbody></table></div>`}`}
     ${modal?.k === 'add' && html`<${AddMember} toast=${toast} onClose=${() => setModal(null)} onSaved=${reloadTeam}/>`}

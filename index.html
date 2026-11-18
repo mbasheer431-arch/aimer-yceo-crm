@@ -20,6 +20,9 @@ window.CRM_CONFIG = {
   REG_FEE: 299,                                   // registration fee (₹)
   PAYMENT_LINK: '',                               // paste your Razorpay / UPI payment link, e.g. https://rzp.io/l/aimer-yceo
   IDEA_FORM_LINK: '',                             // paste the idea submission form link
+  // Connect with Facebook (Meta Lead Ads) — see META-CONNECT-SETUP.md
+  META_APP_ID: '1413799910830068',                                // Meta app → App settings → Basic → App ID
+  META_CONFIG_ID: '1638394771091306',                             // Facebook Login for Business → Configurations → Configuration ID
   CAMPUS_VENUE: 'AIMER Campus',
   CAMPUS_ADDRESS: 'AIMER Business School, Markaz Knowledge City, Kozhikode, Kerala',
   DISTRICTS: ['Thiruvananthapuram','Kollam','Pathanamthitta','Alappuzha','Kottayam','Idukki','Ernakulam','Thrissur','Palakkad','Malappuram','Kozhikode','Wayanad','Kannur','Kasaragod','Other – India','UAE','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain'],
@@ -1383,6 +1386,113 @@ function LeadReports({ me, team, toast }) {
       ${rows.length > 200 && html`<p className="pad small muted">Showing 200 of ${rows.length}. Download Excel for all rows.</p>`}`}</div>`;
 }
 
+/* ---------- Connect with Facebook (Meta Lead Ads) ---------- */
+const FB_SCOPES = 'pages_show_list,pages_read_engagement,pages_manage_metadata,pages_manage_ads,leads_retrieval,business_management';
+const fbSdk = () => new Promise((res, rej) => {
+  if (window.FB) return res(window.FB);
+  window.fbAsyncInit = () => { window.FB.init({ appId: C.META_APP_ID, cookie: false, xfbml: false, version: 'v23.0' }); res(window.FB); };
+  const sc = document.createElement('script'); sc.src = 'https://connect.facebook.net/en_US/sdk.js'; sc.async = true; sc.crossOrigin = 'anonymous';
+  sc.onerror = () => rej(new Error('Could not load Facebook. Check the internet connection or turn off any ad blocker for this site.'));
+  document.head.appendChild(sc);
+});
+const fbApi = (path, params) => new Promise((res, rej) => window.FB.api(path, 'GET', params, r => !r || r.error ? rej(new Error(r?.error?.message || 'Facebook error')) : res(r)));
+async function metaFn(action, body) {
+  const { data } = await db.auth.getSession();
+  const r = await fetch(`${C.SUPABASE_URL}/functions/v1/meta-leads?action=${action}`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: C.SUPABASE_KEY, Authorization: 'Bearer ' + (data.session?.access_token || '') }, body: JSON.stringify(body || {}) });
+  let j = {}; try { j = await r.json(); } catch {}
+  if (!r.ok || j.error) throw new Error(j.error || (r.status === 404 ? 'The meta-leads function isn’t deployed in Supabase yet (step 2 of the setup).' : `Request failed (${r.status})`));
+  return j;
+}
+function MetaConnect({ toast }) {
+  const [status, setStatus] = useState(null); const [flow, setFlow] = useState(null);
+  const [busy, setBusy] = useState(''); const [err, setErr] = useState(null); const [imp, setImp] = useState(null); const [days, setDays] = useState('30');
+  const load = () => db.rpc('admin_meta_status').then(({ data, error }) =>
+    setStatus(error ? { error: /Could not find|does not exist/.test(error.message) ? 'Run update-meta-connect.sql in Supabase first.' : nice(error) } : data || []));
+  useEffect(() => { if (C.META_APP_ID) load(); }, []);
+  const run = async (key, f) => { setBusy(key); setErr(null); try { await f(); } catch (e) { setErr(e.message || String(e)); } setBusy(''); };
+  const login = () => run('login', async () => {
+    const FB = await fbSdk();
+    const opts = C.META_CONFIG_ID ? { config_id: C.META_CONFIG_ID, auth_type: 'rerequest' } : { scope: FB_SCOPES, auth_type: 'rerequest' };
+    const auth = await new Promise(res => FB.login(r => res(r && r.authResponse), opts));
+    if (!auth) throw new Error('Facebook login was cancelled.');
+    const r = await fbApi('/me/accounts', { fields: 'id,name,access_token,picture{url}', limit: 100, access_token: auth.accessToken });
+    if (!r.data?.length) throw new Error('No pages found. You must be an admin of the AIMER page — in the Facebook popup, allow access to that page.');
+    setFlow({ step: 'pages', userToken: auth.accessToken, pages: r.data });
+  });
+  const pickPage = p => run('forms', async () => {
+    const r = await fbApi(`/${p.id}/leadgen_forms`, { fields: 'id,name,status,leads_count', limit: 100, access_token: p.access_token });
+    const forms = r.data || [];
+    setFlow({ step: 'forms', userToken: flow.userToken, page: p, forms, sel: forms.filter(f => f.status === 'ACTIVE').map(f => f.id), all: false });
+  });
+  const editForms = c => run('forms', async () => {
+    const r = await metaFn('forms', { page_id: c.page_id });
+    setFlow({ step: 'forms', editing: true, page: { id: c.page_id, name: c.page_name }, forms: r.forms, sel: (r.selected || []).map(f => f.id), all: !(r.selected || []).length });
+  });
+  const save = () => run('save', async () => {
+    const forms = flow.all ? [] : flow.forms.filter(f => flow.sel.includes(f.id)).map(f => ({ id: f.id, name: f.name }));
+    if (!flow.all && !forms.length) throw new Error('Tick at least one lead form, or choose "All forms".');
+    if (flow.editing) await metaFn('save_forms', { page_id: flow.page.id, forms });
+    else await metaFn('connect', { user_token: flow.userToken, page_id: flow.page.id, forms });
+    toast(flow.editing ? 'Lead forms updated' : `Connected — new leads from ${flow.page.name} now arrive automatically`);
+    setFlow(null); load();
+  });
+  const importPast = c => run('import', async () => { setImp(null); const r = await metaFn('import', { page_id: c.page_id, days: +days }); setImp(r); toast(`${r.created} lead${r.created === 1 ? '' : 's'} imported`); load(); });
+  const disconnect = c => { if (!confirm(`Disconnect ${c.page_name}? New Facebook leads will stop coming into the CRM. Leads already in the CRM stay.`)) return;
+    run('disc', async () => { await metaFn('disconnect', { page_id: c.page_id }); toast('Disconnected'); load(); }); };
+  const fbBtn = { background: '#1877F2', borderColor: '#1877F2', color: '#fff' };
+  const hook = C.SUPABASE_URL.replace(/\/$/, '') + '/functions/v1/meta-leads';
+
+  if (!C.META_APP_ID) return html`<div className="card pad" style=${{ marginBottom: 16 }}>
+    <h2>Facebook & Instagram Lead Ads</h2>
+    <p className="small soft">Connect the AIMER Facebook page and pick your lead forms — new leads then arrive in the CRM within seconds, free and unlimited.</p>
+    <div className="msg warn" style=${{ marginTop: 10 }}><b>One-time setup needed (about 15 minutes).</b> Meta only lets a registered app read leads, so AIMER needs its own Meta app. Follow <b>META-CONNECT-SETUP.md</b>, then put the App ID and Configuration ID in <code>META_APP_ID</code> and <code>META_CONFIG_ID</code> at the top of index.html — a <b>Connect with Facebook</b> button will appear here.</div>
+    <p className="small" style=${{ marginTop: 10 }}>Webhook URL for the setup:</p><code className="small" style=${{ background: 'var(--paper)', padding: '6px 10px', borderRadius: 8, display: 'inline-block', wordBreak: 'break-all' }}>${hook}</code>
+  </div>`;
+
+  const conns = Array.isArray(status) ? status : [];
+  return html`<div className="card pad" style=${{ marginBottom: 16 }}>
+    <div className="row" style=${{ justifyContent: 'space-between' }}><h2>Facebook & Instagram Lead Ads</h2>
+      ${conns.length > 0 && !flow && html`<button className="btn sm" onClick=${login} disabled=${!!busy}>+ Connect another page</button>`}</div>
+    <p className="small soft">New leads from the forms you choose arrive in the CRM within seconds and are shared with telecallers in turn.</p>
+    ${status?.error && html`<div className="msg bad">${status.error}</div>`}
+
+    ${conns.map(c => html`<div key=${c.page_id} className="card pad" style=${{ marginTop: 12, background: 'var(--paper)' }}>
+      <div className="row" style=${{ justifyContent: 'space-between' }}>
+        <div><b>✓ ${c.page_name}</b> <span className="badge b-Paid">Connected</span>
+          <div className="small soft">Forms: ${(c.forms || []).length ? c.forms.map(f => f.name).join(', ') : 'All lead forms on this page'}</div>
+          <div className="small muted">${c.leads_received || 0} leads received${c.last_lead_at ? ' · last ' + fDateTime(c.last_lead_at) : ''} · connected by ${c.connected_by || '—'} on ${fDate(istDate(c.connected_at))}</div></div>
+        <div className="row"><button className="btn sm" disabled=${!!busy} onClick=${() => editForms(c)}>Change forms</button><button className="btn sm danger" disabled=${!!busy} onClick=${() => disconnect(c)}>Disconnect</button></div>
+      </div>
+      <div className="row" style=${{ marginTop: 10 }}><span className="small">Import leads already collected in the last</span>
+        <${Select} value=${days} onChange=${setDays} options=${[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }]} style=${{ width: 'auto', padding: '5px 8px' }}/>
+        <button className="btn sm primary" disabled=${!!busy} onClick=${() => importPast(c)}>${busy === 'import' ? 'Importing…' : 'Import'}</button></div>
+    </div>`)}
+    ${imp && html`<div className="msg ok" style=${{ marginTop: 10 }}><b>${imp.created} new leads imported</b>, ${imp.duplicate} already in the CRM${imp.failed ? `, ${imp.failed} failed (${imp.errors.join('; ')})` : ''}.</div>`}
+
+    ${!conns.length && !flow && !status?.error && html`<div style=${{ marginTop: 12 }}><button className="btn" style=${fbBtn} disabled=${!!busy || status === null} onClick=${login}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M24 12a12 12 0 1 0-13.9 11.9v-8.4H7.1V12h3V9.4c0-3 1.8-4.7 4.5-4.7 1.3 0 2.7.2 2.7.2v2.9h-1.5c-1.5 0-2 .9-2 1.9V12h3.4l-.5 3.5h-2.9v8.4A12 12 0 0 0 24 12z"/></svg>
+      ${busy === 'login' ? 'Opening Facebook…' : 'Connect with Facebook'}</button>
+      <p className="small muted" style=${{ marginTop: 6 }}>Log in as an admin of the AIMER page, then choose the page and lead forms.</p></div>`}
+
+    ${flow?.step === 'pages' && html`<div style=${{ marginTop: 12 }}><b>Step 1 of 2 — choose the page</b>
+      <div className="card list" style=${{ marginTop: 8 }}>${flow.pages.map(p => html`<button key=${p.id} className="item click" style=${{ width: '100%', border: 0, background: 'none', textAlign: 'left' }} disabled=${!!busy} onClick=${() => pickPage(p)}>
+        ${p.picture?.data?.url ? html`<img src=${p.picture.data.url} alt="" width="32" height="32" style=${{ borderRadius: 8 }}/>` : ''}<span className="grow"><b>${p.name}</b></span><span className="small muted">${busy === 'forms' ? 'Loading forms…' : 'Choose ›'}</span></button>`)}</div>
+      <button className="btn sm" style=${{ marginTop: 8 }} onClick=${() => setFlow(null)}>Cancel</button></div>`}
+
+    ${flow?.step === 'forms' && html`<div style=${{ marginTop: 12 }}><b>${flow.editing ? 'Choose lead forms' : 'Step 2 of 2 — choose lead forms'}</b> <span className="small muted">· ${flow.page.name}</span>
+      <label className="row small" style=${{ margin: '8px 0', fontWeight: 600 }}><input type="checkbox" checked=${flow.all} onChange=${e => setFlow({ ...flow, all: e.target.checked })}/> All lead forms on this page, including future ones</label>
+      ${!flow.all && html`<div className="card list">${flow.forms.length ? flow.forms.map(f => html`<label key=${f.id} className="item click" style=${{ cursor: 'pointer' }}>
+        <input type="checkbox" checked=${flow.sel.includes(f.id)} onChange=${e => setFlow({ ...flow, sel: e.target.checked ? [...flow.sel, f.id] : flow.sel.filter(x => x !== f.id) })}/>
+        <span className="grow"><b>${f.name}</b>${f.leads_count != null ? html`<span className="small muted"> · ${f.leads_count} leads so far</span>` : ''}</span>
+        <span className=${'badge ' + (f.status === 'ACTIVE' ? 'b-Paid' : '')}>${f.status === 'ACTIVE' ? 'Active' : (f.status || '').toLowerCase()}</span></label>`)
+        : html`<p className="pad small muted">This page has no lead forms yet. Create one in Meta Ads Manager, or choose "All lead forms" so future forms are included.</p>`}</div>`}
+      <div className="row" style=${{ marginTop: 10 }}><button className="btn primary" disabled=${!!busy} onClick=${save}>${busy === 'save' ? 'Saving…' : flow.editing ? 'Save forms' : 'Connect'}</button><button className="btn" onClick=${() => setFlow(null)}>Cancel</button></div></div>`}
+
+    ${err && html`<div className="msg bad" style=${{ marginTop: 10 }}>${err}</div>`}
+  </div>`;
+}
+
 /* ---------- Connect Meta Lead Ads / website (admin) ---------- */
 function Connect({ toast }) {
   const [key, setKey] = useState(null); const [show, setShow] = useState(false); const [test, setTest] = useState(null);
@@ -1425,9 +1535,11 @@ document.getElementById('yceo-form').addEventListener('submit', async (e) => {
   const Code = ({ text, label }) => html`<div style=${{ position: 'relative', marginTop: 6 }}><pre style=${{ background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 10, padding: 12, fontSize: 12.5, overflowX: 'auto', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>${text}</pre>
     <button className="btn sm" style=${{ position: 'absolute', top: 6, right: 6 }} onClick=${() => copy(text, label + ' copied')}>Copy</button></div>`;
   return html`
-    <div className="head"><div><h1>Connect lead sources</h1><p>Send Meta Lead Ads and website registrations straight into the CRM. Leads are assigned to telecallers in turn.</p></div></div>
+    <div className="head"><div><h1>Connect lead sources</h1><p>Bring Meta Lead Ads and website registrations straight into the CRM. Leads are shared with telecallers in turn.</p></div></div>
+    <${MetaConnect} toast=${toast}/>
     <div className="card pad" style=${{ marginBottom: 16 }}>
       <h2>Your intake details</h2>
+      <p className="small soft">Only needed for the website form or Make / Zapier / n8n — not for "Connect with Facebook" above.</p>
       <p className="small soft">Use these in Make, Zapier or n8n, and in the website form. Keep the intake key private — anyone with it can add leads.</p>
       <div className="form" style=${{ marginTop: 10 }}>
         <${Field} label="URL (method: POST)"><${Code} text=${url} label="URL"/><//>
@@ -1439,7 +1551,7 @@ document.getElementById('yceo-form').addEventListener('submit', async (e) => {
     </div>
 
     <div className="card pad" style=${{ marginBottom: 16 }}>
-      <h2>Meta Lead Ads → CRM via Make.com (easiest)</h2>
+      <h2>Other option: Meta Lead Ads via Make.com</h2>
       <p className="small soft">Each new lead from your Facebook / Instagram lead form appears here within a minute. Set up once in Make.com (free plan is enough to start) — Zapier and n8n work the same way.</p>
       <ol className="small" style=${{ paddingLeft: 18, lineHeight: 1.7 }}>
         <li>Make.com → <b>Create a new scenario</b>.</li>
@@ -1451,18 +1563,6 @@ document.getElementById('yceo-form').addEventListener('submit', async (e) => {
       </ol>
       <${Field} label="Request body (JSON)"><${Code} text=${body(show && key ? key : 'YOUR-INTAKE-KEY')} label="Body"/><//>
       <p className="small muted" style=${{ marginTop: 8 }}>Only p_key, p_name and p_phone are required. Same phone number twice = no duplicate; it's noted on the existing lead.</p>
-    </div>
-
-    <div className="card pad" style=${{ marginBottom: 16 }}>
-      <h2>Meta Lead Ads → CRM, direct (no Make or Zapier)</h2>
-      <p className="small soft">Meta sends each lead straight to your Supabase project — free, no monthly limit, instant. One-time setup takes about 30 minutes and needs admin access to the AIMER Facebook page and Business Manager. Full steps are in <b>META-DIRECT-SETUP.md</b>.</p>
-      <ol className="small" style=${{ paddingLeft: 18, lineHeight: 1.7 }}>
-        <li>Supabase → <b>Edge Functions</b> → Deploy new function → Via editor → name <code>meta-leads</code> → paste <b>supabase-function-meta-leads.ts</b> → Deploy. Then turn <b>off "Verify JWT"</b> for it.</li>
-        <li>Supabase → Edge Functions → <b>Secrets</b>: add <code>META_VERIFY_TOKEN</code> (any phrase), <code>META_APP_SECRET</code> and <code>META_PAGE_TOKEN</code>.</li>
-        <li>developers.facebook.com → your app → <b>Webhooks</b> → Page → Callback URL below + the same verify token → subscribe to <b>leadgen</b>.</li>
-        <li>Connect the AIMER page to the app, allow the app in <b>Leads Access</b>, then test with Meta's <b>Lead Ads Testing Tool</b>.</li>
-      </ol>
-      <${Field} label="Webhook callback URL"><${Code} text=${C.SUPABASE_URL.replace(/\/$/, '') + '/functions/v1/meta-leads'} label="Callback URL"/><//>
     </div>
 
     <div className="card pad">

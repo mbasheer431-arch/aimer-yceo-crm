@@ -21,8 +21,8 @@ window.CRM_CONFIG = {
   PAYMENT_LINK: '',                               // paste your Razorpay / UPI payment link, e.g. https://rzp.io/l/aimer-yceo
   IDEA_FORM_LINK: '',                             // paste the idea submission form link
   // Connect with Facebook (Meta Lead Ads) — see META-CONNECT-SETUP.md
-  META_APP_ID: '1413799910830068',                                // Meta app → App settings → Basic → App ID
-  META_CONFIG_ID: '1638394771091306',                             // Facebook Login for Business → Configurations → Configuration ID
+  META_APP_ID: '',                                // Meta app → App settings → Basic → App ID
+  META_CONFIG_ID: '',                             // Facebook Login for Business → Configurations → Configuration ID
   CAMPUS_VENUE: 'AIMER Campus',
   CAMPUS_ADDRESS: 'AIMER Business School, Markaz Knowledge City, Kozhikode, Kerala',
   DISTRICTS: ['Thiruvananthapuram','Kollam','Pathanamthitta','Alappuzha','Kottayam','Idukki','Ernakulam','Thrissur','Palakkad','Malappuram','Kozhikode','Wayanad','Kannur','Kasaragod','Other – India','UAE','Saudi Arabia','Qatar','Oman','Kuwait','Bahrain'],
@@ -142,6 +142,19 @@ td{padding:11px 14px;border-top:1px solid var(--line);font-size:14px;vertical-al
 .login{min-height:100vh;display:grid;place-items:center;padding:20px}
 .login .card{width:100%;max-width:380px;padding:28px}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* Insights charts — validated series colours */
+:root{--s1:#0B8BA6;--s2:#f47230;--s3:#6a4ce2;--bad-soft:color-mix(in srgb,var(--bad) 55%,var(--card))}
+@media (prefers-color-scheme:dark){:root{--s1:#2BA9C4;--s2:#e76624;--s3:#9887ef}}
+.hbars{display:grid;gap:8px}
+.hbar{display:grid;grid-template-columns:minmax(90px,34%) 1fr auto;gap:10px;align-items:center;font-size:13px}
+.hb-label{color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb-track{height:12px;background:color-mix(in srgb,var(--line) 45%,transparent);border-radius:4px;overflow:hidden}
+.hb-track i{display:block;height:100%;border-radius:0 4px 4px 0}
+.hb-val{min-width:64px;text-align:right;white-space:nowrap}
+.viz-tip{position:absolute;top:0;width:150px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.12);pointer-events:none}
+@media(min-width:900px){.g2e{grid-template-columns:1fr 1fr}}
+.kpis{grid-template-columns:repeat(2,1fr)} @media(min-width:900px){.kpis{grid-template-columns:repeat(4,1fr)}}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
 </style>
 </head>
 <body>
@@ -155,7 +168,7 @@ td{padding:11px 14px;border-top:1px solid var(--line);font-size:14px;vertical-al
 /* ====================================================================
    2. HELPERS
    ==================================================================== */
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const html = htm.bind(React.createElement);
 const C = window.CRM_CONFIG;
 const db = supabase.createClient(C.SUPABASE_URL, C.SUPABASE_KEY);
@@ -320,6 +333,7 @@ const I = {   // tiny inline icons
   lead: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="10" cy="8" r="4"/><path d="M3 21c1-4 4-6 7-6 1.6 0 3 .4 4.2 1.2M18 14v6M15 17h6"/></svg>`,
   plug: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0zM12 17v5"/></svg>`,
   phone: html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>`,
+  insight: html`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>`,
   wa: html`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21l1.6-4.8A9 9 0 1 1 8 19.6z"/></svg>`,
 };
 const LOGO_SHIELD = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJIAAACqCAMAAABxjOZ8AAAAkFBMVEWe2uIdd5oZcnpmq8TU7PJ2xdHl8/lgn6vD8fYnoq2Dtboik8JDfJaKrsh3xLyJybwjgX1Dd37///8UhpYWiacVeY8qhZUWlKrq/PsniagoeZDj/PsplKuz5uxPmKna+vyPx9LS+Ppop7MSk5pVpLGs2eZzt8jK9vnJ6/GIuspxtbkwk5fC6u5GiZdKi6ZJlJq9KDq+AAAAMHRSTlP+////qP9u/+r///////////8A//////9V//9r//7/jv+t/////v/O0P///+z///8v5HfcAAAf0UlEQVR42s1dB3vjSK6ksuzZ9EyRYk4mlcP//3evCuhmkGTL9ob3+O3tzc14pGI3GigUgD7n7dkTvP3Hj/McUvD/DVIQBx+DCv4NvM8hBQ+/NwjiOJ7neEo8uXnm9hf4wx+jdX7ylwAHSLbL5dJJG8dp+k8qz3K7Bc44+IlhfhdSQCxbfqvjOEVRzDaT4bPBUxT4Q4F22pV9XME/Dgm7VRJHsdkc6jrLssTvnvP5bH4VJllW17Wg2ztNeirz+Bum53x9q7antGmKKssMlshrn8g+7W8ItDC8ZNVmXwBWio2cB/+YLQXzcps2WJsqO/uRfJs7fAwmb/i7smSJLNnhUBRNWmKx8jIP/iakfLuk3WwmdQY445Esguuu+Kz5vL+/r0J95Lfe+dxjy+pD4cC2drsy/nuQ8oYWnGWhb7ZFwdhnAKlFub4DJbCuWVa9NtjC+IeQAljPLm2AJwmNjfhhtxzmab9xtRogAqZw5a7W+IHVWjd3HPnR2K9wHNNdHn8K6f4Y4GTA8ThiywLANcsjcIaQvLHLP/V9r0Pkuscj1wVo1vK7gtxzj/4YuK5ZtYddBZ9Bih/Y8zJ1ZpvM7++UgAlvN4RfxHNvcCoiwPHE1vW3gJzLdnx5ccfjMfBnEziH6fzjjbtdpiDfpsUG5sOPNJ+LJ+ETunLmO3dED0QXNMlC+en1WhDB8CI5mIrIxT/vRzzv5oCGWCpnOQ2ss+phuLelON81jl2gtax8azLcIF8Nta4rPgc6ankmofwcFumIP6vFWyYKaaTe4d19T15ekkTsIOJSwTFsTdjpQWr9ly5jUKbNvrpEctDFMrA0R0GDB6aQAQq9DAPGCc8SoWNbYqOxTGHCFTrWGkyw9ZME+/ZLbQ5/NHaPSbKW1+QJDLNsURUCqu/XnYFLDaaNs59k0WjEFXp5gWGs4agFDxfneq1kVcQZB/Zg8vjk6eYShUlCSJtUviNfOjNAWv1KQkHg441cvt3aoOJvnrMNTB3MQXnQ7cbFUy7Q2fiftULi+ox5ULLDjG+/1RjfC6bygrkzGUVw1b4XXfc7s+DOJoF9AWgIm8sy8fxq9GtzCgmqMtsXxHeQpstmv8ACSWBYmdOsrhfnlkZDH/dB6NztL5GBVDlThbQr6tC6jmyDeFQzOFobFW919GlUG5hBCYoV35j3vJEtg5OGR8SW2yN+rapXhgIsTvxxdFriZfAXEx+LdDJbmm4Sn5DwltkmJbUqNnUWApNaqSuugZgymFRuWZ/TRQ4TVImHNsG3wXqLJW/F2wqT/ABSsxiNYLBHP8qcXM9K3NQ+FiQEBn/ibHPwrFND5xKuOkhrjdl+TUxqAxZS7hzOkR7Wlbqf8Rg+ZwPnX5at+/+Y7zSXEaz7/ehGWWp+KC+uY8+FD/VGmbOc84XmZYoAnrQe/Z3AsJUwVZybPBADd+Zqic3hGolRGzcEQ+TpSsv4SyQnaC6wJPGSddqalz9214AURVUqbDwO8nQPewo7+wYovj/WqcJCioHLKsVb53DVwyA/ipVOqg1cfvxVvpkXF89AOlhITeW77y+I2VG2X8ax5Ailk8FzAxF2QjG5xERvfz40J9kOgZSnBRAdjUnjYxPuWP4NCowV8TSWHGdL41KcWiDB7OuiFEhYpAMoV6TBycYEwQdM173GYolx+El8omtO5vplMnPSMv4GojjdCCR4jRcLabq/8sMIadLkejLKIpMDhHUi1QHjTLAlLiHBnqqmtKuEfasNJHxIspjRA30rC5s3Gz9yucrHutgaSJUv7NMbRXs1JSCvlJL7EuOqzQxewaeZIETAx+LUGVuKGwQDT836uHCcNhR++YEHwcojxHn+wSn199IqEg7heZlTBmLdyyIDGXfdkN8P00C6lxa1rhtcRVQ7WwMpLxZRNMJi+vAPjgMi+kGK+wwSjo6/MTYYN4vIZSgbjSZp/BbPaUkzhLi1cJfzgYcZFnYCzEgIl+ddZ/CyASFNi2w0wv5yMQ/pN/fMeDWFFHWQcpwtWflROIGnCnB65+nMHAIEtiYXIjSPEXZ8+v1QA7ZC2u0zYbAeHdYu/i6eQCBFCincpEoRWkirkJ4qmMftIXBpNlvlZlipdAazIQA/OdxDyjbfOvodDQUkzxNIM0DippcKiW5OIQUKCeffHY2yov0eHK7Mc8NkBe9UpWbjduCQBlKxjH8CqTSQXC8swMAEUkFIPMSe+HOuZTOJCCkcRQsnNqQReRAhwU2FIBEEb1bJZ9IDSGLylmF+F5IvkJYa0BHhLKQstYdAIP2CP580ccurHSchUEKSn2whuQYS0c/nX5AKg48hqS1ZSONrar3XBJE9ZIipnLzd9HQmkMJbSJKMCKQgeALJkL++lwAkZknwS8nMUfOOCWk9gBQLJHFVF0uq+DqTRIlepCxCICHmCiQ4tS/Y0gOPJZCQf7hi3vpTgOQKMx1bbhA0k5FCAqezHhUHLgs1J+tBOh0kMYXv5jt+IpUF+tw7LrAtQoLdhO2ZTReRr2S5tgwKbBhbtJYAt2loI2/w6LWvWWlvlQIEXXG0AgniBuWN6U4e/HK7xX9pesQ8iZnS7janJyTJKskfzeufEM9WCqnJ7WJmkVIlj4S7SXcnBBS8TCKY9MT1IcGrJpPZ7HA4bMxz4K9n/UeENTxOM/BfoBJHheS2YXd3OPuSabpX638RnRMb3v0EGeEBGYJP6rkeQno77TNh6Cvwkjo5Ilu7nqlVIV/2j8fk5kH2A23N2QXDVTKQvKxlAq8Wkn8wRz7YOTVQIxvT3AefH1HMUzVjNfJbSPBqmjSsrHSmKoN/7OsRKgyMRHD7bbEfQsIq+e8JISWbXcuXdDPHXuurGXhpc2vqTx71FcnoV0qvQ4mGQ0jrVjOTfLkvXFn5ZKTC5MWkjy2FAy11Jd0INyfLfRcmoo19+9M48bWvn8yPxhElmU103xBAKgtpur+oV7MZqMUh0pURKtqH/uMWEnau1jyW6UAgZzYmVQUfZ6aWNYHF/sfiKJ+sees6OdJE5DvgQhd244aQZN90cRVR95jM9QGkIK2V269wkHPxXHFZnJm1cJ0uxa71YH/Ux7/GkpoIJN8VTAopu4NkpAORsBIr8K2sbKVrlBhI26H/SnWVcLwRAeYiG+UgcXRNWLnLRAIImSUyucUReoVrMgLqH+H6U0guddKejOwZCdeVQOBF1FFH0Rnm3ffigbBqgWQYE779hGxVGBv078lS1XMgdZihRZ7h4ISklgqC8AiSCLcDWX08HkW3z3h8fk0H6gkiABPBVQInKAy65Sc8hmE40p0mBY+hRUEEbb8I2+Z6I/VLiy7sXqKR7A1LDZfek13PfC5Z99BpnSHA7IaCzla8MIiYx2VSSHG6P0chICFW/LZQPSUWUNAGJgv5JsjhmzrxvBtXaSAJJ4WuUrRaH8slxb548DinfBDrYCKMchS3SDG0hheQ7MqmjOjKxOEHhiSVO9aoGAcg1tWr1QNIGvmSCTKm7W5bThHa+JTlbjqdlvLwfy8R4Rj0RGnqr1K+LM5jD58iooSkFFiq3esZC5CI47jsm2G6Ct14x7xpKTJnIqy2JSd7El1abzJLy16VMrivCkpmr1sW9HYO8qDJ9gHJFwMn4thZjOGbYMhYJwTaU/w25BGsMpapQEqEwsW3kGpnmcdPapgdYxqcOWaykb8i/9YUUQBTKxBIosRVwHTDtoI5uHfteQqptpBOJLq0AkDazn+SD/Cz8SlRhAMCcupvHGhJQoea6iwpt/gzPyvS+X1RDekApLFEMpSfQnpY7C2bSRiF6t3rBhKr/NC0gdkzS/vFw0ixbWBQtAUDCcdSINkMJfJM9r7Mf1olhqacKSQXnhSVm7c268VvJ780Wl0PRaMcL7YiNTZOk1CvB4n5DXUP7wh17pbGBmLWz7NyBBBCwtvSD1jW9Pa2tQmdxgaqn81umudTVR5ivgo3Cbvk1xbStriKyANIMxzKXpFdS+7qDp6rKWmlRSjKitWys/u9P/JMbewd8QryO+on1EDLKYroUC8TheT2Vgm8ysgH0JZunWLv+aRipaSNrwv7BkW6WgouZzGMbBmKFgvR+VJt+Ml/4vnjkJkqmdut0klZqhBisluGDIkn5yv5lY+i1cvx5eifD86nigF0KhINEiHQ/aLspB6IDt7K1ohM+YNftVgsQHZ9U8OwkAKFRF4keZN390B65regapF1r/7wKWkVRyGMnurfJs1NC6N2q+KtpEIrdi6JynoAqbdKlul2xFYTTuAlMR27tZEMPjx0+Grfe08IChq1E3eYEDS0UMH9G9ZgVf5uIb1ZSCtDG6muJqx4wbclWvti4oIaD+psh+ZzY4qn6SYa4+ziDbAfVRN0IVBKfO6qXwIWFntkzVUXsOe9d1IQMsTR/KwITgIp5AoKfwek/KlCeB5HR8HENNNi4lkHSTpri0GoNRHJJzX5cA0TqNuwu0GsNJAG+Qh/GZIA6qbjtZ+qPIj9Ec2JexddjGajgXHrvKJME5kqrLiL0UiKskqX7iHpT/Tr+q6p0kZS3UNNrmcdH+6dM7m0aVF03hBTbIPHlCuFj2vpqRJWAynss0pCGkmSFoYGiC3nyV/H/yKk3xbPIb1Nnd8vKNQztcGxu+xNvmLiYomVqiqQVQOJmFDf8kYaG7ukSVbpF1cpTPrNNqbhBjwXf238P+dXZ/68YY7C1tiTGhIwnSunDHo8JpiiGFzsAcuS6QV4+D2kfYhF+vUrHIHoijbRe15//x109HDAy706H5X2B8xJtFzJHumrUUE6DTkYa/6ExQefjfYa8Ow7SBesDyCh3GmK1ykVm5NRbnZGzZnOv9YTt5PUQAMCsu/roXNnSn1ixs6pPjusGmX3ETZx1MtQGMKpFmYkuiBfdxH2Wa1g8OfxqZB1Yr2amwdMJ+M9jOTYewWWDScEdAuJIQemnaGgk3+FiXze4xacNqJaGJ9MQiK67INXC6jFT0b3kK5CRhmXlmQm829jCu4CMBVZFvY1nJNO7u7pDXkunGit1YGeLe1erxQL4HvOxfJHiIQi9nOPvOE6ue/W/+Ko1/vGUtb+voGOkegKO+9B+pN/nZCujvQQ/CQbeLvB5Bwyv40E0mSSTQpp1Ru8MToQlwop6UPa/nlFuPeFUNxDCr7UfShw+iV7xjT2KRiCSy6C9L6WKlzPKWCVllALVZPpQfrj6mrdDkmNs1zuttPu2UlzyeeI5tB/05T6b9w/d/3gL5Ge9cnJZmY7aPBog6Ym4KjvdtUB8iWfNTq/mhUz6gDd86f2dXweQ+hMIc++DihevG1mLJO6GvfFrFj3Q0MOu4zaZ8bqADmHewMpYZ6FViBII6KQiKxBoQQp6hNKsvx9AVIsHS0DbS7YmjDraslbCNmobck6ykOt0rS4uP2CBdc3EdHePFb7QWgj4/5835aL3+Q7xuPF6abaUqLX58zeozB5SZSJwQHZXlBfKI/wJd3YDtLmSA7ab+ZiGjEaSZ/fWAPnZxtHAdCHhh0tmjuz38Giosi0YtqmsX5TnYp3pjDdkZPEHTQl9vTbr0DaLSLW1WGe95Bw9E5IUOBh+o1+wlkVEbbObVOXuoOU6U+z7U9tUaUOmtx4/PnGIWjtKibLaOVQdf9RlnCQ3jpNeFbKc6VX9V1yJoUEW+qxSgspsbT4BtJnfpsFnIgbjxNDSPGD1JwtvqRFHhmkemp5kMv5bMzUZGoAyWxcb4dphSu1pc8hBUy8tW+CkIIgftiUje2TJmh7ckweJ2HMM2bWP3GaoQgm/yavHI//erJKiOS12h/fMr/185aOQJ7EUm0qVoy6JmxNB1yrVQ7New2FnmvacwPy33AC6fzt005eBATpm1iR3NwuUr8oO982BQmqCMV0fKJZZJo+DSCd1FVSs4bmK0U4bb+Hi62QtH5SXGWbvBS+8EK0D7QFyUzGh2tKKTc1WjGCBMp7M3jv8ANIrF9vpGmyN5zgsNPr0yQJiDQ3pPQXCtMOnkToXPUhBEVtCa1DkzS1kLbSnUKRMSscCstK4/igH/7z9mxWs/7S7G9FARQdXaKyBZ/hUg1NBS/yJSi6oamAt5DYyAryRyn2pjt1ICXfb8NUq/Gu9nVTh4eW3Ozij9ov5cMGf8TUHCUhQvK7EzfdJNLUy6L8Nv7SRI4UaEA/Xq/Sh9mqLjwQl6oQ9fyLbRnoXcgiqnBh2OneBhKEBUiM7XhG0KvEP564cIrFGUUf8akK6X3Nd0V1O93GXx4kYd+FH0oXTQ9S6GqxGJCCr3yKqp6H618QCkamddMWXf0Q4mBdpF+WhgUSa0Khr957ztRSO+Fo3rvgS1MpuVKhsem1s419/JeU2fzs6y2HaC3Ex7BNNdKwayB5rGmy8velDynTAv28DAlh2PW3rtmft5LmRDbjs5Mpjp/nEfD+ouiGlugKpLOIzIQ0fY4n30EXzjh1wd7ZFYObkjORx1aJmuUY5Xm0ZjwjyTTKPqS2Aq6QvPFTSDCiKTueUTkaCXVYu57pIVW25YdaOudCuUiT2H0Y347YDcpBiH2ERM2mZ957NNG4yRGQivyJDWGuYJKxJXxkGm09T7sJhIKRSmiHAcwdC+VLkmQaoT9adClYkBP1TxyzXTQhAxLqFfOPJ5vg/4vqcgklz9BcCOMc2q6xZoYTTtih5FOCe2GDgCdRs9c6eu9PTKVJ2qf9li8Rks/9H12axwGKywPCgyjJJnUzsEN2jr1bzGYvrsRIcOcZ4ovvm3Vam6EZbfHfPZ6vkrIOlcFEWGnQaQJYJvawsMvrzmnLdkE5o/YJhuOFRvrkv1B6dZyFhm02SjnMJ8cqVb63HSNHrBUmPHYPQCm58ZSsdfU46fIS7w1nEtspSq3oThGuG+n7p/KqpD5UeR8yItyPs3U2BtIIFK40YrJV2E3BQVpyC1ALdrR3Fg9yU9psV8rNhMQCrPSBsIkl4TegqLzUwcSGRWrwpoyTX6abQfw0F5mJKIwXZiItXuxoHeEQQ3fAVMQZPfU+BkYgepmiCUMhPqdiQd2RmUyk+vgqfNPsZWX6IqQntQ9p7UKrnDlSlS+0f2pSX6RU3A7KaJ+PTrxhWmrLLm7h3tqXmcq+75xqcZX2njazIN2W/8jAUS3UbSblK1A4y+B8u0qBM1v4JhzIRzDx1uTYFyHY8zw7Cmc6iGC0UPtosYAQNJU0I69MBVsqF87rQiYfpUkltIJOb7ow7Jq0fCncgydfDmLeXKVZfWy9nWfnBN027+rmBdsE9VofGrZxSMBILaTRxDQKMXDtq6uCGkz4mc91b0pa0uqJwMgE3pG+FOkpMjbGn8c/x3e3nURb6ySSliH+wtDSQdopun4T1fcJqWNBCDv7xSXSD+kajlrH2pXmXF0lxLPXnbBKaZU5mlE2OYuQMt6PWupbE0tim63kPF8JaJsHrdtD4V0hoY3a1H0CaRfKT86+TkIrNdz2Q1kz07yX+24hQQeSpudeHxeSUFoNI5iukDnJHCU6FKZr3rLrWFJ++evQzQeFn2A+5dxJnZjNMqBe2gatVTsmyfwo0kqnozn7OfLbaUWZ0jFTBsYiVX2hVPXqQG00dfFAZ8WAKLIJPDCVg4AGjYljQ0d/0M7W5tQ9SCELCbkd+iiLi5LD1ppk/sy3uW8kg1bwdKfpNA76xXrsDVuRjHGQ5GKeZis9Mu2ETz5NmVFWNf0Cy6bWwu1AqUKCKbEnxY7GsEWsneqUVfJ13IoeEtZTIRzoGOIgFmAFqGhFtkK64ugGvQPd1bBpAoN3BYpM9VWdi2cyat9+q+QnTtnNNC1/xzKZdQqlm1MfDFGKR0OX7H081hkfK2fpCaCIQJd1rwwHDNxw2QUyaPGWmUy7tgvhGkdpIU1/X1hIIZti4bk1ReaHoGLQHvg2w8c3QAq5RtQ9XDkGhMRyHoSN4+IPrpSmTZ0oIHNWp8Z2IiD9xj9mHNOTlvzeMFrQ/P6bkA4e5JnEN2cJqZltFTczg2aFdihJmFKtcm7unE6xibRWY6XyxzkSlGt87JStyaXlSuy3rowe7NhGiItCYlsVJlHy3ry9ZOLx7czq5EKyJkVjTU+0eh76ZhD2WM9wGuKn5WkLaezbTnHn7W1g4DgFNTC1NyYEtr0r6C3QvlpkEixMc6ThRSSWrl0oV+Py7oliXl3YZxgartaHxIao0EDixE5rnPMht6TEh2xAzqNqtMxRXDNWhnEObTGX4iDM4wJQp92jeSTTYklqxeMmLTBlCynQcd1NYlXW46Gn4XbWiTMP06zP7X0CreSqmMRIbZSWZI7AOTiaOreoZN05A2dcNPNjq9IaSNJF5PFz2Md7PQwyVWZKUzYdbjC9aYa7XTt7S27JhXo3R26koLqoCqs6yInZTbsZYVonYmsl40xsYEBj4HYe9DYO4z3QLzgiwQyTzaVO1wyYc76YNeuOWuo28aDhpEwmicx+c5hhMiGmUauh+8IqfGmBR3sQdnEnc990B46mDvSWrhpLfwY8wDnnSKuvSS+WG4YJ14aPSDnvjE7R9oYDhmGrosvAVAFaKAjJ3ZkHMxFWSGu1dQ1KCWISLqoozL0jbB/uhts33XiX025tiemLyNQ25K3oZDn9eyFN1RJGOzIfmkZ7TOhNp43o3vh2yAyIMZvFRaJRktzevhAmJjJgyWAEiS8dU/jSy6YnbFknMGdufrCRrX1WXo9b/vr1yxYcBDc6okSAlupAqJOnoqlMFqwv+Xr5At9AKFevNzqS5FZv00DlKGI1K7iFxFbsbVH1I2FXVJFf/PplIJnelSsdtEirfUj0YSX5pERjsqPEVOPW/TkEG9tkFhX6Zv84OT2qgRSM05m+HmvTjzVsitfhAaFOe8ZWOa9asEhE+RA/j5oXQJnaLj5OV6p9yyRp35ojy6K4Bg+uyxD2k27Oukykw6YlK1GuKzxKp6cvUETAnUp7prU6oDWQWAsW7MJpyNzMvvumMrPSFaJ7cG0l62oGd+5vXWATwdZMA4ZmxL6760ITClg0yNzB3KJiIo7ODaxbSJaU5KlzIG1jlizVxsgypNDM60pvIbqiho50AMnMjMpoSL/r0LwpThgvUOECxT0VrQeJedygCRzN3AfikmYj6VbqACUSdUBDl8MGDmfYPM1SujT26+argKRuAbfMYM6WycDNgOgAkuZxbS0H9QzStmpx/o3D/RcZqTSj74k07kjXbjyfP74uQ/q5U3j5sVT81ishV+B0Jlsmh+qt8bybrriFNChOQP+H093vpSyTKaS1EAZfGj9uu1ycoXaPWOhwaNUzsyGcmCCn47tuPxqflYGP1SNIge1XD6Qzv8EFGh0iGr2u0ZAiOrctEYzPle979oYSSrMcLxYN5rGQJjLFau173V0Cg4hvsxlsooOGMp1Dp4kmk66O8NGdOfhTuYZALhdwRRxFXjMRZU9fpn3v3nMSSIyNi/RB743iCqS5CyVbz+yaJ1ctPJAxnfvCC3kahlo8mTh26ZQTuTqCIlUQDCmmgUSxJ1RIDwupPMy5Y5orCOmoV3ekj5puHkAS/3TIjA+hBCnnonNnt5/CgAKf/zEk5YhQ7xXROpG+4k3xuH7g3PXgiD1BJmDDgdJ96fT5pM9jAOlxx4wEK2mQM6YtHjJ+dv9SNzfBMpJgEtlIvGXEG1I+mA+XjQvVlh428eDIsKeCGV+iOq9tbvzilVABmQpfC1fnRJ4WI0gkrtX+cdvwScQcXpyweNwnsJULCzyRhpK13Lyz/7id3XlYWpT04dRM9INEC5IrUlg+Ch73CVD6IKQ7WyJXmfijsSKSaMk+qfi7F2fxdDFhE+VobXIgcE0W//Kb+gEDioGU3Zs33NxEVts16YMWxj5pY3E+aZSEdgSvaT+LtAKhjrryTTdpWosTk3JxPLwmURJ1cvHuyhvjjeLgRzeeQYvAgLbcVmXUd/AvVmqGDk4grQzRjbuhJzTlsNPEXFZl5jhZ+c3/ziVsaNIGbZe7AmwZh/PGTtofoUkzC2mR5nO2BMZSat2hbVluvUHotsVobNqzpjHn6VUBME66zZWOX8p1U7JSZceXtC8yjEYZZEFGQ3Ni2V9ibrZbJ5LNQTh8WvN9fqEfrZxpUGhb7ETGhC6Smim4t7Z71EICHYEjqiVN8cNWf0/qyf55X/2X7hhEP4AuVJe2sEXywCBDZ08nEMoMHAZkCQmFkUNmpAPJziXIsv/0K5dxfO0mxqm5csyzlRSeHB+qj9zOd8JAB4uGoxHzuKWMKvrMUplbGr2QekXxZEDje5dDxju9l81ddQUtJPIYzQQpTEGCmLxAwXPIQA6iKfuuvfJG2j60xeLtH7xCE0FBDjRzHb3AzhXht8aFZaineUyBcVeIrNAxUvVYM1OuEGPRLviH7z4N9IYpjiGQQxmCgK+GVLN4YeKQcBpiIn7I10wk0YANI2JndfAPX8cqHhkdrhsdAZbSlYIaU5zEBv3iJXmcfR5HenuQvdIoQ973rQtdnG8MMYLTn3CUmO2LS9AR7rGdSZKKiPasWqnD0wsftvG/dGmtyouNGZbWlHrdjUlpkWbQUQtXIRf2vf2r9+iyzobGzbNvxoA45dUTMUJ7M6LcgyBe4tst9s4P7uzB4TtUtlRhPZWm64liIqAzbWg7f/svbhuWViGc9bM/1nvb7BqJlKSz9r6MU27L+D+5AFlSJ/GIpnjr2hk8EY58BaQM5kdzCD+5k1m7vLTv9mwGxEIVpbRJgbeqcIT1Z5MRzs9uiY5VtZM2i8TXjvJIZk0lli3LPI5/MmLz85urzXxZzl4dZ9O7QeEsU1Flbm7XefvPIHV3+ti7bc/n386YEEb7huzY37qK/OeQjL4EUOybxgQub8c9MdoH//Zd8c9oC3WyHdplHOdUxsE/cFX734YUmIk3lCKD3h1W/5eQ3oJ/+gL+vw/p7b///x34z5//BSYKRZageXutAAAAAElFTkSuQmCC';
@@ -1712,6 +1726,262 @@ document.getElementById('yceo-form').addEventListener('submit', async (e) => {
 }
 
 /* ====================================================================
+   MANAGEMENT INSIGHTS — both CRMs, Simple / Detailed
+   ==================================================================== */
+const PERIODS = [['7', 'Last 7 days'], ['30', 'Last 30 days'], ['month', 'This month'], ['90', 'Last 90 days'], ['custom', 'Custom']];
+const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+const mins = m => m == null ? '—' : m < 60 ? `${Math.round(m)} min` : m < 1440 ? `${(m / 60).toFixed(1)} h` : `${(m / 1440).toFixed(1)} days`;
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
+const dayDiff = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+const SCHOOL_RANK = { 'New': 0, 'Contacted': 1, 'Not interested': 1, 'Interested': 2, 'Confirmed': 3, 'Programme scheduled': 3, 'Programme completed': 4 };
+const rankOf = st => SCHOOL_RANK[st] ?? 2;          // custom stages sit between Interested and Confirmed
+const CONNECTED = ['Connected', 'Interested', 'Call back later', 'Not interested'];
+
+function periodRange(p, from, to) {
+  const t = todayStr();
+  if (p === 'custom' && from && to) return [from, to];
+  if (p === 'month') return [t.slice(0, 8) + '01', t];
+  const n = +p || 30; return [addDays(t, -(n - 1)), t];
+}
+
+// KPI tile with change vs previous period
+function Kpi({ label, value, prev, fmt = v => v, good = 'up', hint }) {
+  const ch = prev == null || typeof value !== 'number' ? null : prev === 0 ? (value > 0 ? 100 : 0) : Math.round((value - prev) / prev * 100);
+  const better = ch == null || ch === 0 ? null : (ch > 0) === (good === 'up');
+  return html`<div className="stat" style=${{ cursor: 'default' }} title=${hint || ''}>
+    <div className="num">${fmt(value)}</div><p>${label}</p>
+    ${ch != null && html`<p className="small" style=${{ marginTop: 4, color: better == null ? 'var(--muted)' : better ? 'var(--ok)' : 'var(--bad)', fontWeight: 600 }}>
+      ${ch > 0 ? '▲' : ch < 0 ? '▼' : '■'} ${Math.abs(ch)}% <span style=${{ color: 'var(--muted)', fontWeight: 400 }}>vs previous</span></p>`}
+  </div>`;
+}
+
+// Horizontal bars with direct labels (funnels, types, sources)
+function HBars({ rows, color = 'var(--s1)', showStep }) {
+  const max = Math.max(1, ...rows.map(r => r.value));
+  return html`<div className="hbars">${rows.map((r, i) => html`<div key=${r.label} className="hbar" title=${r.title || `${r.label}: ${r.value}`}>
+    <span className="hb-label">${r.label}</span>
+    <span className="hb-track"><i style=${{ width: Math.max(r.value ? 1.5 : 0, r.value / max * 100) + '%', background: r.color || color }}/></span>
+    <span className="hb-val"><b>${r.value.toLocaleString('en-IN')}</b>${showStep && i > 0 ? html` <span className="muted">${pct(r.value, rows[i - 1].value)}%</span>` : r.note ? html` <span className="muted">${r.note}</span>` : ''}</span>
+  </div>`)}</div>`;
+}
+
+// Daily (or weekly) columns: new leads vs paid, with hover tooltip
+function TrendChart({ days, series }) {
+  const [hov, setHov] = useState(null); const box = useRef(null); const [W, setW] = useState(720);
+  useEffect(() => { const el = box.current; if (!el || !window.ResizeObserver) return; const ro = new ResizeObserver(([e]) => setW(Math.max(280, Math.round(e.contentRect.width)))); ro.observe(el); return () => ro.disconnect(); }, []);
+  const H = W < 500 ? 180 : 230, L = 34, R = 8, T = 12, B = 26, n = days.length;
+  const max = Math.max(4, ...days.flatMap(d => series.map(s => d[s.key])));
+  const step = Math.pow(10, Math.floor(Math.log10(max))) / (max / Math.pow(10, Math.floor(Math.log10(max))) > 5 ? 0.5 : max / Math.pow(10, Math.floor(Math.log10(max))) > 2 ? 1 : 2);
+  const top = Math.ceil(max / step) * step, ticks = []; for (let v = 0; v <= top + 1e-9; v += step) ticks.push(Math.round(v * 100) / 100);
+  const bw = (W - L - R) / n, gw = Math.min(28, bw * 0.78), sw = (gw - 2 * (series.length - 1)) / series.length;
+  const y = v => T + (H - T - B) * (1 - v / top), every = Math.ceil(n / Math.max(4, Math.floor(W / 90)));
+  const bar = (x, v, c) => { if (!v) return null; const h = Math.max(2, y(0) - y(v)), r = Math.min(4, sw / 2, h);
+    return html`<path d=${`M${x},${y(0)} V${y(0) - h + r} Q${x},${y(0) - h} ${x + r},${y(0) - h} H${x + sw - r} Q${x + sw},${y(0) - h} ${x + sw},${y(0) - h + r} V${y(0)} Z`} fill=${c}/>`; };
+  return html`<div ref=${box} style=${{ position: 'relative' }}>
+    <svg viewBox=${`0 0 ${W} ${H}`} width=${W} height=${H} role="img" aria-label=${'Trend of ' + series.map(s => s.label).join(' and ')} style=${{ display: 'block' }}>
+      ${ticks.map(v => html`<g key=${v}><line x1=${L} x2=${W - R} y1=${y(v)} y2=${y(v)} stroke="var(--line)" strokeWidth=${v === 0 ? 1.2 : 1}/>
+        <text x=${L - 6} y=${y(v) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">${v}</text></g>`)}
+      ${days.map((d, i) => { const x0 = L + i * bw + (bw - gw) / 2; return html`<g key=${d.key}>
+        ${hov === i && html`<rect x=${L + i * bw} y=${T} width=${bw} height=${H - T - B} fill="var(--ink)" fillOpacity="0.05"/>`}
+        ${series.map((s, j) => bar(x0 + j * (sw + 2), d[s.key], s.color))}
+        ${(i % every === 0 || i === n - 1) && html`<text x=${L + i * bw + bw / 2} y=${H - 8} textAnchor="middle" fontSize="11" fill="var(--muted)">${d.label}</text>`}
+        <rect x=${L + i * bw} y=${T} width=${bw} height=${H - T - B + 8} fill="transparent" onMouseEnter=${() => setHov(i)} onMouseLeave=${() => setHov(null)} onClick=${() => setHov(i)}/></g>`; })}
+    </svg>
+    ${hov != null && html`<div className="viz-tip" style=${{ left: `clamp(0px, calc(${(L + hov * bw + bw / 2) / W * 100}% - 70px), calc(100% - 150px))` }}>
+      <b>${days[hov].full}</b>${series.map(s => html`<div key=${s.key} className="row" style=${{ gap: 6, flexWrap: 'nowrap' }}><i className="dot" style=${{ background: s.color }}/>${s.label}<b style=${{ marginLeft: 'auto' }}>${days[hov][s.key]}</b></div>`)}</div>`}
+    <div className="row small soft" style=${{ gap: 14, marginTop: 4 }}>${series.map(s => html`<span key=${s.key} className="row" style=${{ gap: 6 }}><i className="dot" style=${{ background: s.color }}/>${s.label}</span>`)}</div>
+  </div>`;
+}
+
+function Insights({ me, team, toast }) {
+  const [view, setView] = useState(() => { try { return localStorage.getItem('yceo-insights') || 'simple'; } catch { return 'simple'; } });
+  const setV = v => { setView(v); try { localStorage.setItem('yceo-insights', v); } catch {} };
+  const [period, setPeriod] = useState('30'); const [from, setFrom] = useState(''); const [to, setTo] = useState(''); const [ltype, setLtype] = useState('');
+  const [raw, setRaw] = useState(null); const [err, setErr] = useState(null);
+  const [start, end] = periodRange(period, from, to);
+  const len = dayDiff(start, end) + 1, pStart = addDays(start, -len), pEnd = addDays(start, -1);
+
+  useEffect(() => {
+    setRaw(null); setErr(null);
+    const since = pStart + 'T00:00:00+05:30';
+    Promise.all([
+      fetchAll(() => db.from('leads').select('id,created_at,stage,paid_at,amount,source,lead_type,telecaller_id,district,school_name,next_follow_up,idea_at')),
+      fetchAll(() => db.from('lead_activities').select('lead_id,type,outcome,by_user,created_at').gte('created_at', since)),
+      fetchAll(() => db.from('schools').select('id,status,district,officer_id,next_follow_up,created_at')),
+      fetchAll(() => db.from('outreach').select('school_id,type,outcome,officer_id,done_on').gte('done_on', pStart)),
+      fetchAll(() => db.from('programmes').select('id,status,date,actual,expected,officer_id,type,school_id')),
+    ]).then(([leads, acts, schools, outreach, progs]) => setRaw({ leads, acts, schools, outreach, progs }))
+      .catch(e => setErr(nice(e)));
+  }, [start, end]);
+
+  const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
+  if (err) return html`<div className="msg bad">${err}</div>`;
+  const head = html`
+    <div className="head"><div><h1>Insights</h1><p>Management view of School Outreach and Young CEO Leads · ${fDate(start)} – ${fDate(end)}</p></div>
+      <div className="row"><div className="seg" role="tablist" aria-label="View">
+        <button className=${view === 'simple' ? 'on' : ''} onClick=${() => setV('simple')}>Simple</button>
+        <button className=${view === 'detailed' ? 'on' : ''} onClick=${() => setV('detailed')}>Detailed</button></div>
+        ${raw && html`<button className="btn" onClick=${() => exportExcel('Insights ' + start + ' to ' + end, sheets)}>Download Excel</button>`}</div></div>
+    <div className="card pad row" style=${{ marginBottom: 16, gap: 10 }}>
+      <${Select} value=${period} onChange=${setPeriod} options=${PERIODS.map(([v, l]) => ({ value: v, label: l }))} aria-label="Period" style=${{ width: 'auto' }}/>
+      ${period === 'custom' && html`<input className="input" type="date" value=${from} max=${todayStr()} onInput=${e => setFrom(e.target.value)} aria-label="From" style=${{ width: 'auto' }}/>
+        <input className="input" type="date" value=${to} max=${todayStr()} onInput=${e => setTo(e.target.value)} aria-label="To" style=${{ width: 'auto' }}/>`}
+      <${Select} value=${ltype} onChange=${setLtype} options=${LEAD_TYPES} blank="All lead types" aria-label="Lead type" style=${{ width: 'auto' }}/>
+      <span className="small muted" style=${{ marginLeft: 'auto' }}>Compared with the previous ${len} day${len === 1 ? '' : 's'}</span>
+    </div>`;
+  if (!raw) return html`${head}<p className="muted">Loading insights…</p>`;
+
+  // ---------- calculations ----------
+  const inR = (d, a, b) => d && d >= a && d <= b;
+  const today = todayStr();
+  const L0 = ltype ? raw.leads.filter(l => l.lead_type === ltype) : raw.leads;
+  const leadIds = new Set(L0.map(l => l.id));
+  const A = raw.acts.filter(a => leadIds.has(a.lead_id));
+  const newL = L0.filter(l => inR(istDate(l.created_at), start, end)), prevL = L0.filter(l => inR(istDate(l.created_at), pStart, pEnd));
+  const paidL = L0.filter(l => inR(l.paid_at, start, end)), prevPaid = L0.filter(l => inR(l.paid_at, pStart, pEnd));
+  const rev = a => a.reduce((s, l) => s + (+l.amount || 0), 0);
+  const convNow = pct(newL.filter(l => PAID_STAGES.includes(l.stage)).length, newL.length);
+  const convPrev = pct(prevL.filter(l => PAID_STAGES.includes(l.stage)).length, prevL.length);
+  // first call delay
+  const firstCall = {};
+  A.filter(a => a.type === 'Call').forEach(a => { if (!firstCall[a.lead_id] || a.created_at < firstCall[a.lead_id]) firstCall[a.lead_id] = a.created_at; });
+  const delayOf = l => firstCall[l.id] ? Math.max(0, (Date.parse(firstCall[l.id]) - Date.parse(l.created_at)) / 6e4) : null;
+  const delays = newL.map(delayOf).filter(v => v != null), prevDelays = prevL.map(delayOf).filter(v => v != null);
+  const speed = [['Under 5 min', d => d < 5], ['5–60 min', d => d >= 5 && d < 60], ['1–24 hours', d => d >= 60 && d < 1440], ['Over 1 day', d => d >= 1440]]
+    .map(([label, f]) => ({ label, value: newL.filter(l => { const d = delayOf(l); return d != null && f(d); }).length }))
+    .concat([{ label: 'Not called yet', value: newL.filter(l => delayOf(l) == null && l.stage === 'New').length, color: 'var(--bad-soft)' }]);
+  // schools
+  const O = raw.outreach.filter(o => inR(o.done_on, start, end)), Op = raw.outreach.filter(o => inR(o.done_on, pStart, pEnd));
+  const contacted = new Set(O.map(o => o.school_id)).size, contactedPrev = new Set(Op.map(o => o.school_id)).size;
+  const confirmedNow = new Set(O.filter(o => o.outcome === 'Confirmed').map(o => o.school_id)).size, confirmedPrev = new Set(Op.filter(o => o.outcome === 'Confirmed').map(o => o.school_id)).size;
+  const done = raw.progs.filter(p => p.status === 'Completed' && inR(p.date, start, end)), doneP = raw.progs.filter(p => p.status === 'Completed' && inR(p.date, pStart, pEnd));
+  const students = done.reduce((s, p) => s + (p.actual || 0), 0), studentsP = doneP.reduce((s, p) => s + (p.actual || 0), 0);
+  const S = raw.schools;
+  const schoolFunnel = [['All schools', 0], ['Contacted', 1], ['Interested', 2], ['Confirmed', 3], ['Programme done', 4]]
+    .map(([label, r]) => ({ label, value: r === 0 ? S.length : S.filter(s => rankOf(s.status) >= r && !(r > 1 && s.status === 'Not interested')).length }));
+  const leadFunnel = [
+    { label: 'New leads', value: newL.length },
+    { label: 'Contacted', value: newL.filter(l => l.stage !== 'New').length },
+    { label: 'Interested', value: newL.filter(l => ['Interested', 'Payment pending', ...PAID_STAGES].includes(l.stage)).length },
+    { label: 'Paid', value: newL.filter(l => PAID_STAGES.includes(l.stage)).length },
+    { label: 'Idea submitted', value: newL.filter(l => ['Idea submitted', 'Shortlisted'].includes(l.stage)).length },
+  ];
+  // trend
+  const weekly = len > 45, buckets = [];
+  for (let d = start; d <= end; d = addDays(d, weekly ? 7 : 1)) {
+    const e = weekly ? (addDays(d, 6) > end ? end : addDays(d, 6)) : d;
+    buckets.push({ key: d, label: weekly ? fShort(d) : (+d.slice(8)).toString(), full: weekly ? `Week of ${fDate(d)}` : `${weekday(d)}, ${fDate(d)}`,
+      leads: L0.filter(l => inR(istDate(l.created_at), d, e)).length, paid: L0.filter(l => inR(l.paid_at, d, e)).length,
+      visits: raw.outreach.filter(o => inR(o.done_on, d, e)).length });
+  }
+  // team
+  const officers = team.filter(t => ['officer', 'coordinator', 'manager'].includes(t.role) && t.active).map(t => {
+    const mine = O.filter(o => o.officer_id === t.id), p = done.filter(x => x.officer_id === t.id);
+    return { name: t.name, activities: mine.length, visits: mine.filter(o => o.type === 'School visit').length, meetings: mine.filter(o => /meeting/i.test(o.type)).length,
+      confirmed: new Set(mine.filter(o => o.outcome === 'Confirmed').map(o => o.school_id)).size, programmes: p.length, students: p.reduce((s, x) => s + (x.actual || 0), 0),
+      schools: S.filter(s => s.officer_id === t.id).length, overdue: S.filter(s => s.officer_id === t.id && !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up < today).length };
+  }).filter(o => o.activities || o.schools).sort((a, b) => b.confirmed - a.confirmed || b.activities - a.activities);
+  const callersT = team.filter(t => ['telecaller', 'coordinator'].includes(t.role) && t.active).map(t => {
+    const calls = A.filter(a => a.by_user === t.id && a.type === 'Call' && inR(istDate(a.created_at), start, end));
+    const mine = newL.filter(l => l.telecaller_id === t.id), paid = paidL.filter(l => l.telecaller_id === t.id), d = mine.map(delayOf).filter(v => v != null);
+    return { name: t.name, calls: calls.length, connected: pct(calls.filter(a => CONNECTED.includes(a.outcome)).length, calls.length), leads: mine.length, paid: paid.length, revenue: rev(paid),
+      conv: pct(mine.filter(l => PAID_STAGES.includes(l.stage)).length, mine.length), speed: median(d),
+      overdue: L0.filter(l => l.telecaller_id === t.id && !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up < today).length };
+  }).filter(o => o.calls || o.leads).sort((a, b) => b.paid - a.paid || b.calls - a.calls);
+  // sources, types, districts, activity types
+  const group = (arr, key) => Object.entries(arr.reduce((m, l) => { const k = l[key] || '(none)'; (m[k] ||= []).push(l); return m; }, {}));
+  const sources = group(newL, 'source').map(([k, v]) => ({ label: k, value: v.length, paid: v.filter(l => PAID_STAGES.includes(l.stage)).length })).sort((a, b) => b.value - a.value);
+  const types = LEAD_TYPES.map(t => { const v = raw.leads.filter(l => l.lead_type === t && inR(istDate(l.created_at), start, end)); const p = v.filter(l => PAID_STAGES.includes(l.stage));
+    return { label: t, value: v.length, paid: p.length, conv: pct(p.length, v.length), revenue: rev(raw.leads.filter(l => l.lead_type === t && inR(l.paid_at, start, end))) }; });
+  const actTypes = group(O, 'type').map(([k, v]) => ({ label: k, value: v.length })).sort((a, b) => b.value - a.value);
+  const districts = [...new Set([...S.map(s => s.district), ...newL.map(l => l.district)].filter(Boolean))].map(d => {
+    const ss = S.filter(s => s.district === d), ll = newL.filter(l => l.district === d);
+    return { district: d, schools: ss.length, contacted: ss.filter(s => s.status !== 'New').length, confirmed: ss.filter(s => rankOf(s.status) >= 3).length,
+      leads: ll.length, paid: ll.filter(l => PAID_STAGES.includes(l.stage)).length };
+  }).sort((a, b) => b.schools + b.leads - a.schools - a.leads);
+  const overdueSchools = S.filter(s => !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up < today).length;
+  const overdueLeads = L0.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up < today).length;
+  const unassignedLeads = L0.filter(l => !l.telecaller_id && !['Not interested', 'Wrong number'].includes(l.stage)).length;
+  const unassignedSchools = S.filter(s => !s.officer_id && !CLOSED.includes(s.status)).length;
+
+  // plain-language highlights
+  const notes = [];
+  if (newL.length && delays.length) notes.push(`Half of new leads got their first call within ${mins(median(delays))}${median(delays) > 60 ? ' — aim for under 5 minutes; Meta leads go cold fast.' : '.'}`);
+  if (speed.at(-1).value) notes.push(`${speed.at(-1).value} new lead${speed.at(-1).value === 1 ? ' hasn’t' : 's haven’t'} been called yet.`);
+  if (sources.length > 1) { const best = [...sources].filter(s => s.value >= 5).sort((a, b) => pct(b.paid, b.value) - pct(a.paid, a.value))[0]; if (best) notes.push(`${best.label} converts best: ${pct(best.paid, best.value)}% of its leads have paid.`); }
+  if (overdueSchools + overdueLeads) notes.push(`${overdueSchools} school${overdueSchools === 1 ? '' : 's'} and ${overdueLeads} lead${overdueLeads === 1 ? '' : 's'} are past their next-action date.`);
+  if (unassignedLeads + unassignedSchools) notes.push(`${unassignedSchools} open school${unassignedSchools === 1 ? '' : 's'} and ${unassignedLeads} lead${unassignedLeads === 1 ? '' : 's'} have nobody assigned.`);
+  if (schoolFunnel[2].value && schoolFunnel[3].value < schoolFunnel[2].value / 2) notes.push(`Only ${pct(schoolFunnel[3].value, schoolFunnel[2].value)}% of interested schools have confirmed — push for principal meetings and dates.`);
+
+  var sheets = {
+    Summary: [
+      { Measure: 'New leads', 'This period': newL.length, 'Previous period': prevL.length },
+      { Measure: 'Payments', 'This period': paidL.length, 'Previous period': prevPaid.length },
+      { Measure: 'Revenue (₹)', 'This period': rev(paidL), 'Previous period': rev(prevPaid) },
+      { Measure: 'Lead conversion %', 'This period': convNow, 'Previous period': convPrev },
+      { Measure: 'Median first-call time (min)', 'This period': Math.round(median(delays) ?? 0), 'Previous period': Math.round(median(prevDelays) ?? 0) },
+      { Measure: 'Schools contacted', 'This period': contacted, 'Previous period': contactedPrev },
+      { Measure: 'Schools confirmed', 'This period': confirmedNow, 'Previous period': confirmedPrev },
+      { Measure: 'Programmes done', 'This period': done.length, 'Previous period': doneP.length },
+      { Measure: 'Students reached', 'This period': students, 'Previous period': studentsP }],
+    Trend: buckets.map(b => ({ [weekly ? 'Week of' : 'Date']: b.key, 'New leads': b.leads, Paid: b.paid, 'Outreach activities': b.visits })),
+    'Lead funnel': leadFunnel.map(r => ({ Step: r.label, Leads: r.value })),
+    'School funnel': schoolFunnel.map(r => ({ Step: r.label, Schools: r.value })),
+    Telecallers: callersT.map(c => ({ Telecaller: c.name, Calls: c.calls, 'Connected %': c.connected, 'New leads': c.leads, Paid: c.paid, 'Revenue (₹)': c.revenue, 'Conversion %': c.conv, 'Median first call (min)': c.speed == null ? '' : Math.round(c.speed), Overdue: c.overdue })),
+    Officers: officers.map(o => ({ Officer: o.name, Activities: o.activities, Visits: o.visits, Meetings: o.meetings, 'Schools confirmed': o.confirmed, Programmes: o.programmes, Students: o.students, 'Schools owned': o.schools, Overdue: o.overdue })),
+    Sources: sources.map(s => ({ Source: s.label, Leads: s.value, Paid: s.paid, 'Conversion %': pct(s.paid, s.value) })),
+    'Lead types': types.map(t => ({ Type: t.label, Leads: t.value, Paid: t.paid, 'Conversion %': t.conv, 'Revenue (₹)': t.revenue })),
+    Districts: districts.map(d => ({ District: d.district, Schools: d.schools, Contacted: d.contacted, Confirmed: d.confirmed, 'New leads': d.leads, Paid: d.paid })),
+  };
+
+  const card = (title, body, sub) => html`<div className="card pad"><h2>${title}</h2>${sub && html`<p className="small soft" style=${{ margin: '2px 0 0' }}>${sub}</p>`}<div style=${{ marginTop: 12 }}>${body}</div></div>`;
+  const table = (cols, rows, empty) => rows.length ? html`<div className="scroll"><table><thead><tr>${cols.map(([h, , r]) => html`<th key=${h} className=${r ? 'r' : ''}>${h}</th>`)}</tr></thead>
+    <tbody>${rows.map((row, i) => html`<tr key=${i}>${cols.map(([h, f, r, cls]) => html`<td key=${h} className=${(r ? 'r ' : '') + (cls ? cls(row) : '')}>${f(row)}</td>`)}</tr>`)}</tbody></table></div>` : html`<p className="muted small">${empty}</p>`;
+
+  const trend = card(weekly ? 'New leads and payments by week' : 'New leads and payments by day',
+    html`<${TrendChart} days=${buckets} series=${[{ key: 'leads', label: 'New leads', color: 'var(--s1)' }, { key: 'paid', label: 'Paid', color: 'var(--s2)' }]}/>`);
+  const funnels = html`<div className="grid g2 g2e" style=${{ marginTop: 16 }}>
+    ${card('Lead funnel', html`<${HBars} rows=${leadFunnel} showStep/>`, 'Leads added in this period, by how far they’ve got. % = carried on from the step above.')}
+    ${card('School funnel', html`<${HBars} rows=${schoolFunnel} showStep/>`, 'All schools in the CRM today. Custom stages count as Interested.')}</div>`;
+  const leaders = html`<div className="grid g2 g2e" style=${{ marginTop: 16 }}>
+    ${card('Telecallers', table([['Name', c => html`<b>${c.name}</b>`], ['Calls', c => c.calls, 1], ['Paid', c => c.paid, 1, () => 'ok'], ['Conv.', c => c.conv + '%', 1], ...(view === 'detailed' ? [['Connected', c => c.connected + '%', 1], ['First call', c => mins(c.speed), 1], ['Revenue', c => inr(c.revenue), 1]] : []), ['Overdue', c => c.overdue, 1, c => c.overdue ? 'bad' : '']], view === 'simple' ? callersT.slice(0, 5) : callersT, 'No telecaller activity in this period.'))}
+    ${card('Outreach officers', table([['Name', o => html`<b>${o.name}</b>`], ['Activities', o => o.activities, 1], ['Confirmed', o => o.confirmed, 1, () => 'ok'], ...(view === 'detailed' ? [['Visits', o => o.visits, 1], ['Meetings', o => o.meetings, 1], ['Programmes', o => o.programmes, 1], ['Students', o => o.students, 1]] : []), ['Overdue', o => o.overdue, 1, o => o.overdue ? 'bad' : '']], view === 'simple' ? officers.slice(0, 5) : officers, 'No outreach activity in this period.'))}</div>`;
+
+  return html`${head}
+    <div className="stats kpis">
+      <${Kpi} label="New leads" value=${newL.length} prev=${prevL.length}/>
+      <${Kpi} label=${`Paid · ${inr(rev(paidL))}`} value=${paidL.length} prev=${prevPaid.length}/>
+      <${Kpi} label="Lead conversion" value=${convNow} prev=${convPrev} fmt=${v => v + '%'} hint="Share of leads added in this period that have paid"/>
+      <${Kpi} label="Median first-call time" value=${median(delays) ?? '—'} prev=${median(prevDelays)} fmt=${v => typeof v === 'number' ? mins(v) : v} good="down"/>
+      <${Kpi} label="Schools contacted" value=${contacted} prev=${contactedPrev}/>
+      <${Kpi} label="Schools confirmed" value=${confirmedNow} prev=${confirmedPrev}/>
+      <${Kpi} label="Programmes done" value=${done.length} prev=${doneP.length}/>
+      <${Kpi} label="Students reached" value=${students} prev=${studentsP} fmt=${v => v.toLocaleString('en-IN')}/>
+    </div>
+    ${notes.length > 0 && html`<div className="card pad" style=${{ marginBottom: 16 }}><h2>What needs attention</h2>
+      <ul style=${{ margin: '8px 0 0', paddingLeft: 20, lineHeight: 1.7 }}>${notes.map(t => html`<li key=${t}>${t}</li>`)}</ul></div>`}
+    ${trend}
+    ${funnels}
+    ${leaders}
+    ${view === 'detailed' && html`
+      <div className="grid g2 g2e" style=${{ marginTop: 16 }}>
+        ${card('How fast new leads get their first call', html`<${HBars} rows=${speed}/>`, 'Leads added in this period. The first minutes matter most for Meta leads.')}
+        ${card('Young CEO 2.0 vs Preliminary', html`<${HBars} rows=${types.map((t, i) => ({ label: t.label, value: t.value, color: i ? 'var(--s3)' : 'var(--s1)', note: `${t.paid} paid · ${t.conv}%` }))}/>
+          <p className="small soft" style=${{ marginTop: 10 }}>${types.map(t => `${t.label}: ${inr(t.revenue)} collected`).join(' · ')}</p>`, 'Leads added in this period, with how many have paid.')}
+      </div>
+      <div className="grid g2 g2e" style=${{ marginTop: 16 }}>
+        ${card('Where leads come from', html`<${HBars} rows=${sources.map(s => ({ ...s, note: `${s.paid} paid · ${pct(s.paid, s.value)}%` }))}/>`, 'New leads by source, with paid and conversion.')}
+        ${card('Outreach activity by type', actTypes.length ? html`<${HBars} rows=${actTypes}/>` : html`<p className="muted small">No outreach logged in this period.</p>`, 'Calls, visits and meetings logged in this period.')}
+      </div>
+      <div style=${{ marginTop: 16 }}>${card('Districts', table([['District', d => html`<b>${d.district}</b>`], ['Schools', d => d.schools, 1], ['Contacted', d => d.contacted, 1], ['Confirmed', d => d.confirmed, 1, () => 'ok'], ['New leads', d => d.leads, 1], ['Paid', d => d.paid, 1, () => 'ok']], districts, 'No data yet.'), 'Schools: all in the CRM. Leads: added in this period.')}</div>
+      <div className="grid g2 g2e" style=${{ marginTop: 16 }}>
+        ${card('Waiting on the team', html`<${HBars} rows=${[{ label: 'Schools overdue', value: overdueSchools, color: 'var(--bad-soft)' }, { label: 'Leads overdue', value: overdueLeads, color: 'var(--bad-soft)' }, { label: 'Schools unassigned', value: unassignedSchools }, { label: 'Leads unassigned', value: unassignedLeads }]}/>`, 'Right now, regardless of period.')}
+        ${card('Programmes', html`<${HBars} rows=${[{ label: 'At AIMER Campus', value: done.filter(p => p.type === 'At AIMER Campus').length, note: done.filter(p => p.type === 'At AIMER Campus').reduce((s, p) => s + (p.actual || 0), 0) + ' students' }, { label: 'At school', value: done.filter(p => p.type === 'At school').length, note: done.filter(p => p.type === 'At school').reduce((s, p) => s + (p.actual || 0), 0) + ' students' }, { label: 'Upcoming (all dates)', value: raw.progs.filter(p => p.date >= today && ['Tentative', 'Confirmed', 'Rescheduled'].includes(p.status)).length }]}/>`, 'Completed in this period, by where they ran.')}
+      </div>`}
+    ${view === 'simple' && html`<p className="small muted" style=${{ marginTop: 16 }}>Switch to <b>Detailed</b> for first-call speed, lead types, sources, districts, activity types and programme breakdowns.</p>`}`;
+}
+
+/* ====================================================================
    10. APP
    ==================================================================== */
 function App() {
@@ -1755,9 +2025,10 @@ function App() {
   const m = !canLeads ? 'outreach' : !canOutreach ? 'leads' : mode;
   const setMode = x => { try { localStorage.setItem('yceo-mode', x); } catch {} setModeState(x); go(x === 'leads' ? 'ldash' : 'dashboard'); };
   const admin = me.role === 'admin' ? [['team', 'Team', I.team]] : [];
+  const ins = ['admin', 'coordinator', 'manager'].includes(me.role) ? [['insights', 'Insights', I.insight]] : [];
   const tabs = m === 'leads'
-    ? [['ldash', 'Dashboard', I.home], ['leads', 'Leads', I.lead], ['lreports', 'Reports', I.chart], ...admin, ...(me.role === 'admin' ? [['connect', 'Connect', I.plug]] : [])]
-    : [['dashboard', 'Dashboard', I.home], ['schools', 'Schools', I.school], ['programmes', 'Programmes', I.cal], ['reports', 'Reports', I.chart], ...admin];
+    ? [['ldash', 'Dashboard', I.home], ['leads', 'Leads', I.lead], ['lreports', 'Reports', I.chart], ...ins, ...admin, ...(me.role === 'admin' ? [['connect', 'Connect', I.plug]] : [])]
+    : [['dashboard', 'Dashboard', I.home], ['schools', 'Schools', I.school], ['programmes', 'Programmes', I.cal], ['reports', 'Reports', I.chart], ...ins, ...admin];
   const cur = tabs.some(x => x[0] === tab) ? tab : tabs[0][0];
   const P = { me, team, toast, bump, refreshKey, openSchool, openProgramme, editSchool, newProgramme, openLead, editLead };
   const ModeSwitch = () => html`<div className="mode" role="tablist" aria-label="Choose CRM">
@@ -1777,6 +2048,7 @@ function App() {
       ${cur === 'ldash' && html`<${LeadDashboard} ...${P} go=${go}/>`}
       ${cur === 'leads' && html`<${Leads} ...${P} params=${params}/>`}
       ${cur === 'lreports' && html`<${LeadReports} ...${P}/>`}
+      ${cur === 'insights' && html`<${Insights} me=${me} team=${team} toast=${toast}/>`}
       ${cur === 'connect' && html`<${Connect} toast=${toast}/>`}
       ${cur === 'team' && html`<${Team} me=${me} team=${team} reloadTeam=${reloadTeam} toast=${toast}/>`}
     </main>

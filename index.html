@@ -300,6 +300,12 @@ const badge = s => html`<span className=${'badge b-' + String(s).replace(/ /g, '
 const wa = n => n ? 'https://wa.me/' + n.replace(/\D/g, '').replace(/^0/, '').replace(/^(\d{10})$/, '91$1') : null;
 const tel = n => n ? 'tel:' + n.replace(/\s/g, '') : null;
 const clean = t => (t || '').replace(/[%,()]/g, ' ').trim();
+// The programme that matters for a school: the next active one, else the latest
+let RO = false;   // true for the CEO (view-only) role — hides every editing control
+const ACTIVE_PROG = ['Tentative','Confirmed','Rescheduled'];
+const mainProg = list => { const t = todayStr(), up = list.filter(p => ACTIVE_PROG.includes(p.status) && p.date >= t).sort((a, b) => a.date < b.date ? -1 : 1);
+  return up[0] || [...list].sort((a, b) => a.date < b.date ? 1 : -1)[0] || null; };
+const progLine = p => p ? `${fShort(p.date)} · ${p.type === 'At AIMER Campus' ? 'Campus' : 'At school'} · ${p.status === 'Completed' ? (p.actual ?? 0) + ' attended' : p.expected + ' expected'}` : '';
 const followState = d => !d ? '' : d < todayStr() ? 'overdue' : d === todayStr() ? 'today' : '';
 const nice = e => {
   const m = e?.message || String(e);
@@ -437,8 +443,8 @@ function Dashboard({ me, team, go, openSchool, openProgramme, toast }) {
   const maxD = Math.max(1, ...districts.map(x => x.n));
 
   return html`
-    <div className="head"><div><h1>Hello, ${me.name.split(' ')[0]}</h1><p>${me.role === 'coordinator' ? 'Calls and follow-ups across the whole team.' : isMgr ? 'Outreach across every officer and district.' : 'Your schools and follow-ups.'}</p></div>
-      <div className="row"><button className="btn gold" onClick=${() => go('schools', { add: true })}>+ Add school</button><button className="btn" onClick=${() => go('programmes', { add: true })}>Schedule programme</button></div></div>
+    <div className="head"><div><h1>Hello, ${me.name.split(' ')[0]}</h1><p>${RO ? 'View-only overview of the whole outreach team.' : me.role === 'coordinator' ? 'Calls and follow-ups across the whole team.' : isMgr ? 'Outreach across every officer and district.' : 'Your schools and follow-ups.'}</p></div>
+      ${!RO && html`<div className="row"><button className="btn gold" onClick=${() => go('schools', { add: true })}>+ Add school</button><button className="btn" onClick=${() => go('programmes', { add: true })}>Schedule programme</button></div>`}</div>
 
     <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert && s.n ? ' alert' : '')} onClick=${() => go(s.tab || 'schools', s.go || {})}>
       <div className="num">${s.n}</div><p>${s.l}</p>${!s.alert && !s.tab && html`<div className="bar"><i style=${{ width: Math.round(s.n / total * 100) + '%' }}/></div>`}</button>`)}</div>
@@ -486,7 +492,8 @@ function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump, t
   const [district, setDistrict] = useState(''); const [officer, setOfficer] = useState(isMgr || params.status || params.follow ? '' : me.id); const [follow, setFollow] = useState(params.follow || '');
   const [page, setPage] = useState(0); const [rows, setRows] = useState(null); const [total, setTotal] = useState(0);
   const [sel, setSel] = useState([]); const [lists, setLists] = useState(false);
-  useEffect(() => { if (params.add) editSchool(null); }, []);
+  const [prog, setProg] = useState(params.prog || ''); const [progs, setProgs] = useState({});
+  useEffect(() => { if (params.add && !RO) editSchool(null); }, []);
   useEffect(() => {
     let alive = true;
     const t = setTimeout(async () => {
@@ -497,21 +504,32 @@ function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump, t
       if (officer === 'none') x = x.is('officer_id', null); else if (officer) x = x.eq('officer_id', officer);
       if (follow === 'today') x = x.eq('next_follow_up', todayStr());
       if (follow === 'overdue') x = x.lt('next_follow_up', todayStr()).not('status', 'in', '("Programme completed","Not interested")');
+      if (prog) {
+        let px = db.from('programmes').select('school_id');
+        if (prog === 'upcoming') px = px.in('status', ACTIVE_PROG).gte('date', todayStr());
+        else if (prog !== 'any' && prog !== 'none') px = px.eq('status', prog);
+        const ids = [...new Set((await fetchAll(() => px)).map(r => r.school_id))];
+        if (prog === 'none') { if (ids.length) x = x.not('id', 'in', `(${ids.join(',')})`); }
+        else x = x.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+      }
       const { data, count } = await x.order('created_at', { ascending: false }).range(page * PAGE, page * PAGE + PAGE - 1);
-      if (alive) { setRows(data || []); setTotal(count || 0); setSel([]); }
+      const ids = (data || []).map(r => r.id); let pm = {};
+      if (ids.length) { const { data: pr } = await db.from('programmes').select('id,code,school_id,date,start_time,type,status,expected,actual').in('school_id', ids);
+        (pr || []).forEach(p => (pm[p.school_id] ||= []).push(p)); }
+      if (alive) { setRows(data || []); setTotal(count || 0); setSel([]); setProgs(pm); }
     }, 250);
     return () => { alive = false; clearTimeout(t); };
-  }, [q, status, district, officer, follow, page, refreshKey]);
+  }, [q, status, district, officer, follow, prog, page, refreshKey]);
   const assign = async to => { if (!sel.length) return;
     const { error } = await db.from('schools').update({ officer_id: to || null }).in('id', sel);
     if (error) toast(nice(error)); else { toast(`${sel.length} school${sel.length === 1 ? '' : 's'} assigned to ${team.find(t => t.id === to)?.name || 'nobody'}`); bump(); } };
-  useEffect(() => setPage(0), [q, status, district, officer, follow]);
+  useEffect(() => setPage(0), [q, status, district, officer, follow, prog]);
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
   return html`
     <div className="head"><div><h1>Schools</h1><p>${total} school${total === 1 ? '' : 's'}${officer === me.id ? ' assigned to you' : officer === 'none' ? ' unassigned' : officer ? ' · ' + nameOf(officer) : ' in the shared list'}</p></div>
-      <div className="row">${isMgr && html`<button className="btn" onClick=${() => setLists(true)}>Stages & types</button>`}${isMgr && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}<button className="btn primary" onClick=${() => editSchool(null)}>+ Add school</button></div></div>
+      ${!RO && html`<div className="row">${isMgr && html`<button className="btn" onClick=${() => setLists(true)}>Stages & types</button>`}${isMgr && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}<button className="btn primary" onClick=${() => editSchool(null)}>+ Add school</button></div>`}</div>
     ${bulk && html`<${BulkUpload} team=${team} onClose=${() => setBulk(false)} onDone=${bump}/>`}
     ${lists && html`<${ListsManager} toast=${toast} onClose=${() => setLists(false)} onChanged=${bump}/>`}
     <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', marginBottom: 14 }}>
@@ -520,19 +538,23 @@ function Schools({ me, team, params, openSchool, editSchool, refreshKey, bump, t
       <${Select} value=${district} onChange=${setDistrict} options=${C.DISTRICTS} blank="All districts" aria-label="District"/>
       <${Select} value=${officer} onChange=${setOfficer} options=${[...(isMgr ? [] : [{ value: me.id, label: 'My schools' }]), { value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active && t.role !== 'telecaller' && (isMgr || t.id !== me.id)).map(t => ({ value: t.id, label: t.name }))]} blank=${isMgr ? 'All officers' : 'All schools (shared list)'} aria-label="Officer"/>
       <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'today', label: 'Next action today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any next action" aria-label="Next action"/>
+      <${Select} value=${prog} onChange=${setProg} options=${[{ value: 'any', label: 'Has a programme' }, { value: 'upcoming', label: 'Programme upcoming' }, ...['Tentative','Confirmed','Rescheduled','Completed','Cancelled'].map(v => ({ value: v, label: 'Programme ' + v.toLowerCase() })), { value: 'none', label: 'No programme yet' }]} blank="Any programme status" aria-label="Programme"/>
     </div>
     ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No schools match. Clear a filter or add a school.</div>` : html`
       <div className="card list hide-lg">${rows.map(s => html`<div key=${s.id} className="item click" onClick=${() => openSchool(s.id)}>
         <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${s.name}</b>${badge(s.status)}</div>
         <div className="small muted">${s.code} · ${s.city}, ${s.district}</div>
+        ${(pp => pp && html`<div className="small row" style=${{ gap: 6, margin: '3px 0' }}><span className="muted">Programme:</span>${badge(pp.status)}<span>${progLine(pp)}</span>${progs[s.id].length > 1 ? html`<span className="muted">+${progs[s.id].length - 1}</span>` : ''}</div>`)(mainProg(progs[s.id] || []))}
         <div className="small">Next: ${s.next_action ? html`<b>${s.next_action}</b> · ` : ''}<b className=${followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(s.next_follow_up, s.next_action_time)}</b><span className=${s.officer_id === me.id ? 'ok' : 'muted'}> · ${s.officer_id === me.id ? 'You' : nameOf(s.officer_id)}</span></div></div></div>`)}</div>
-      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${rows.length > 0 && sel.length === rows.length} onChange=${e => setSel(e.target.checked ? rows.map(r => r.id) : [])}/></th>`}<th>School</th><th>District</th><th>Contact</th><th>Stage</th><th>Officer</th><th>Last contact</th><th>Next action</th></tr></thead>
+      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && !RO && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${rows.length > 0 && sel.length === rows.length} onChange=${e => setSel(e.target.checked ? rows.map(r => r.id) : [])}/></th>`}<th>School</th><th>District</th><th>Contact</th><th>Stage</th><th>Programme</th><th>Officer</th><th>Last contact</th><th>Next action</th></tr></thead>
         <tbody>${rows.map(s => html`<tr key=${s.id} className="click" onClick=${() => openSchool(s.id)}>
-          ${isMgr && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + s.name} checked=${sel.includes(s.id)} onChange=${e => setSel(e.target.checked ? [...sel, s.id] : sel.filter(x => x !== s.id))}/></td>`}
+          ${isMgr && !RO && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + s.name} checked=${sel.includes(s.id)} onChange=${e => setSel(e.target.checked ? [...sel, s.id] : sel.filter(x => x !== s.id))}/></td>`}
           <td><b>${s.name}</b><div className="small muted">${s.code}${s.board ? ' · ' + s.board : ''}</div></td>
           <td>${s.district}<div className="small muted">${s.city}</div></td>
           <td>${s.coordinator || s.principal || '—'}<div className="small muted">${s.phone || ''}</div></td>
-          <td>${badge(s.status)}</td><td className=${s.officer_id === me.id ? 'ok' : s.officer_id ? '' : 'muted'}>${s.officer_id === me.id ? 'You' : nameOf(s.officer_id)}</td>
+          <td>${badge(s.status)}</td>
+          <td>${(pp => pp ? html`${badge(pp.status)}<div className="small muted" style=${{ marginTop: 3 }}>${progLine(pp)}${progs[s.id].length > 1 ? ` · ${progs[s.id].length} total` : ''}</div>` : html`<span className="small muted">—</span>`)(mainProg(progs[s.id] || []))}</td>
+          <td className=${s.officer_id === me.id ? 'ok' : s.officer_id ? '' : 'muted'}>${s.officer_id === me.id ? 'You' : nameOf(s.officer_id)}</td>
           <td>${fDate(s.last_contact)}</td><td>${s.next_action ? html`<div className="small">${s.next_action}</div>` : ''}<b className=${'small ' + (followState(s.next_follow_up) === 'overdue' ? 'bad' : followState(s.next_follow_up) === 'today' ? 'warn' : '')}>${whenText(s.next_follow_up, s.next_action_time)}</b></td></tr>`)}</tbody></table></div>
       ${isMgr && sel.length > 0 && html`<div className="row hide-sm" style=${{ marginTop: 10 }}><span className="small"><b>${sel.length} selected</b> — assign to</span>
         <${Select} value="" onChange=${v => assign(v === 'none' ? null : v)} options=${[{ value: 'none', label: 'Unassigned' }, ...team.filter(t => t.active && !['telecaller'].includes(t.role)).map(t => ({ value: t.id, label: t.name }))]} blank="Choose officer…" style=${{ width: 230 }}/></div>`}
@@ -635,7 +657,7 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
     const [a, b, c] = await Promise.all([
       db.from('schools').select('*').eq('id', id).single(),
       db.from('outreach').select('*').eq('school_id', id).order('done_on', { ascending: false }).order('created_at', { ascending: false }),
-      db.from('programmes').select('id,code,date,start_time,type,status,expected,actual').eq('school_id', id).order('date', { ascending: false }),
+      db.from('programmes').select('id,code,date,start_time,end_time,type,venue,address,coordinator,officer_id,status,expected,actual,notes,completion_remarks,files_link').eq('school_id', id).order('date', { ascending: false }),
     ]);
     if (a.error) { toast('This school isn’t available to you.'); return onClose(); }
     setS(a.data); setHist(b.data || []); setProgs(c.data || []);
@@ -646,7 +668,7 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
     const { error } = await db.from('schools').delete().eq('id', id); if (error) toast(nice(error)); else { toast('School deleted'); bump(); onClose(); } };
   if (!s) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
   const nameOf = x => team.find(t => t.id === x)?.name || 'Unassigned';
-  const canWork = me.role !== 'officer' || s.officer_id === me.id;
+  const canWork = !RO && (me.role !== 'officer' || s.officer_id === me.id);
   const info = [['School ID', s.code], ['City', s.city + ', ' + s.district], ['Address', s.address], ['Category / board', [s.category, s.board].filter(Boolean).join(' · ')],
     ['Principal', s.principal], ['Coordinator', s.coordinator], ['Phone', s.phone], ['WhatsApp', s.whatsapp], ['Email', s.email], ['Students', s.students],
     ['Officer', nameOf(s.officer_id)], ['Lead source', s.source], ['Last contact', fDate(s.last_contact)], ['Remarks', s.remarks]];
@@ -656,13 +678,29 @@ function SchoolDetail({ me, team, id, onClose, editSchool, scheduleFor, openProg
       ${(s.whatsapp || s.phone) && html`<a className="btn" href=${wa(s.whatsapp || s.phone)} target="_blank">${I.wa} WhatsApp</a>`}
       ${canWork && html`<button className="btn" onClick=${() => editSchool(s)}>Edit</button>`}
       ${canWork && html`<button className="btn gold" onClick=${() => scheduleFor(s)}>Schedule programme</button>`}</div>
-    ${!canWork && html`<div className="msg warn" style=${{ marginBottom: 16, color: 'var(--ink)' }}>This school belongs to <b>${s.officer_id ? nameOf(s.officer_id) : 'nobody yet (unassigned)'}</b>. You can see its details and history; only ${s.officer_id ? 'they' : 'the officer it’s assigned to'} or the coordinator can update it. Ask the coordinator if it should be yours.</div>`}
+    ${!canWork && !RO && html`<div className="msg warn" style=${{ marginBottom: 16, color: 'var(--ink)' }}>This school belongs to <b>${s.officer_id ? nameOf(s.officer_id) : 'nobody yet (unassigned)'}</b>. You can see its details and history; only ${s.officer_id ? 'they' : 'the officer it’s assigned to'} or the coordinator can update it. Ask the coordinator if it should be yours.</div>`}
     <${NextBanner} row=${s} actions=${SCHOOL_ACTIONS} closed=${CLOSED.includes(s.status)} readOnly=${!canWork} onSave=${async v => { const { error } = await db.from('schools').update({ next_action: v.action, next_follow_up: v.date, next_action_time: v.time || null }).eq('id', s.id); if (error) toast(nice(error)); else { toast('Next action saved'); load(); bump(); } }}/>
     ${canWork && html`<h3 style=${{ marginBottom: 10 }}>Log outreach</h3>
     <${OutreachForm} key=${s.status} me=${me} team=${team} schoolId=${s.id} status=${s.status} toast=${toast} onSaved=${() => { toast('Outreach saved'); load(); bump(); }}/>`}
-    <h3 style=${{ margin: '22px 0 10px' }}>Programmes</h3>
-    ${progs.length ? html`<div className="card list">${progs.map(p => html`<div key=${p.id} className="item click" onClick=${() => openProgramme(p.id)}><div className="grow"><b>${fDate(p.date)}, ${fTime(p.start_time)}</b><div className="small muted">${p.code} · ${p.type} · ${p.actual ?? p.expected} students</div></div>${badge(p.status)}</div>`)}</div>`
-      : html`<p className="muted small">No programme yet.</p>`}
+    <h3 style=${{ margin: '22px 0 10px' }}>Programme status</h3>
+    ${(() => { const mp = mainProg(progs);
+      if (!mp) return html`<div className="card pad"><div className="row" style=${{ justifyContent: 'space-between' }}><span className="soft small">No programme scheduled for this school yet.</span>
+        ${canWork && html`<button className="btn sm gold" onClick=${() => scheduleFor(s)}>Schedule programme</button>`}</div></div>`;
+      const past = mp.date < todayStr(), rows = [
+        ['Date & time', `${weekday(mp.date)}, ${fDate(mp.date)} · ${fTime(mp.start_time)}${mp.end_time ? ' – ' + fTime(mp.end_time) : ''}`],
+        ['Where', `${mp.type}${mp.venue ? ' · ' + mp.venue : ''}`], ['Address', mp.address],
+        ['Students', mp.status === 'Completed' ? `${mp.actual ?? 0} attended of ${mp.expected} expected` : `${mp.expected} expected`],
+        ['School contact', mp.coordinator], ['Officer', nameOf(mp.officer_id)],
+        ['Notes', mp.notes], ['Completion remarks', mp.completion_remarks]].filter(r => r[1]);
+      const note = mp.status === 'Completed' ? ['ok', 'Programme done.'] : mp.status === 'Cancelled' ? ['bad', 'This programme was cancelled.'] : past ? ['bad', 'The date has passed — open the programme and mark it Completed or reschedule it.'] : mp.status === 'Tentative' ? ['warn', 'Date not confirmed yet — confirm it with the school.'] : ['ok', `Confirmed · ${dayDiff(todayStr(), mp.date) === 0 ? 'today' : 'in ' + dayDiff(todayStr(), mp.date) + ' day' + (dayDiff(todayStr(), mp.date) === 1 ? '' : 's')}.`];
+      return html`<div className="card">
+        <div className="item"><div className="grow"><b>${mp.code}</b> ${badge(mp.status)}<div className=${'small ' + note[0]} style=${{ marginTop: 4, fontWeight: 600 }}>${note[1]}</div></div>
+          <button className="btn sm" onClick=${() => openProgramme(mp.id)}>Open programme</button></div>
+        ${rows.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 130, flex: 'none' }}>${k}</span><span>${v}</span></div>`)}
+        ${mp.files_link && html`<div className="item small"><span className="muted" style=${{ width: 130, flex: 'none' }}>Photos & files</span><a href=${mp.files_link} target="_blank" rel="noopener">Open folder</a></div>`}
+      </div>`; })()}
+    ${progs.length > 1 && html`<h3 style=${{ margin: '18px 0 10px', fontSize: 15 }}>All programmes at this school (${progs.length})</h3>
+      <div className="card list">${progs.map(p => html`<div key=${p.id} className="item click" onClick=${() => openProgramme(p.id)}><div className="grow"><b>${fDate(p.date)}, ${fTime(p.start_time)}</b><div className="small muted">${p.code} · ${p.type} · ${p.status === 'Completed' ? (p.actual ?? 0) + ' attended' : p.expected + ' expected'}</div></div>${badge(p.status)}</div>`)}</div>`}
     ${leads && html`<h3 style=${{ margin: '22px 0 10px' }}>Young CEO leads from this school (${leads.length})</h3>
       ${leads.length ? html`<p className="small soft" style=${{ margin: '0 0 8px' }}>${['Young CEO 2.0','Preliminary Programme'].map(t => `${leads.filter(x => x.lead_type === t).length} ${t === 'Preliminary Programme' ? 'preliminary' : 'Young CEO 2.0'}`).join(' · ')} · ${leads.filter(x => ['Paid','Idea submitted','Shortlisted'].includes(x.stage)).length} paid</p>
         <div className="card list">${leads.slice(0, 10).map(x => html`<div key=${x.id} className="item click" onClick=${() => openLead && openLead(x.id)}><div className="grow"><b>${x.name}</b> <span className="small muted">${x.category || ''}</span></div>${typeTag(x.lead_type)}${badge(x.stage)}</div>`)}</div>
@@ -717,7 +755,7 @@ function Programmes({ me, team, params, openProgramme, newProgramme, refreshKey 
 
   return html`
     <div className="head"><div><h1>Programmes</h1><p>Aimer Young CEO Preliminary Programme — at AIMER Campus or at the school.</p></div>
-      <button className="btn gold" onClick=${() => newProgramme(null)}>+ Schedule programme</button></div>
+      ${!RO && html`<button className="btn gold" onClick=${() => newProgramme(null)}>+ Schedule programme</button>`}</div>
     <div className="row" style=${{ justifyContent: 'space-between', marginBottom: 12 }}>
       <div className="row">${view !== 'list' && html`<button className="btn sm" aria-label="Previous" onClick=${() => step(-1)}>‹</button><button className="btn sm" onClick=${() => setAnchor(todayStr())}>Today</button><button className="btn sm" aria-label="Next" onClick=${() => step(1)}>›</button>`}<h2 style=${{ marginLeft: 6 }}>${title}</h2></div>
       <div className="row"><${Select} value=${filter} onChange=${setFilter} options=${P_TYPES} blank="Campus + school" aria-label="Type" style=${{ width: 'auto', padding: '6px 10px' }}/>
@@ -805,7 +843,7 @@ function ProgrammeDetail({ me, team, id, onClose, editProgramme, openSchool, toa
     if (error) { toast('This programme isn’t available to you.'); return onClose(); } setP(data); setActual(data.actual ?? data.expected); setLink(data.files_link || ''); };
   useEffect(() => { load(); }, [id]);
   if (!p) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
-  const canEdit = me.role !== 'officer' || p.officer_id === me.id;
+  const canEdit = !RO && (me.role !== 'officer' || p.officer_id === me.id);
   const update = async (row, msg) => { const { error } = await db.from('programmes').update(row).eq('id', id); if (error) toast(nice(error)); else { toast(msg); load(); bump(); } };
   const live = !['Completed','Cancelled'].includes(p.status);
   return html`<${Modal} title=${p.schools?.name} sub=${html`${badge(p.status)} <span style=${{ marginLeft: 6 }}>${p.code} · ${p.type}</span>`} onClose=${onClose}>
@@ -966,7 +1004,7 @@ function BulkUpload({ team, onClose, onDone }) {
 /* ====================================================================
    9. TEAM (admin) — add, remove, reset passwords; saved in Supabase
    ==================================================================== */
-const ROLE_OPTS = [{ value: 'officer', label: 'Outreach Officer' }, { value: 'telecaller', label: 'Telecaller (Young CEO leads)' }, { value: 'coordinator', label: 'Marketing Coordinator' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }];
+const ROLE_OPTS = [{ value: 'officer', label: 'Outreach Officer' }, { value: 'telecaller', label: 'Telecaller (Young CEO leads)' }, { value: 'coordinator', label: 'Marketing Coordinator' }, { value: 'manager', label: 'Manager' }, { value: 'ceo', label: 'CEO (view only)' }, { value: 'admin', label: 'Admin' }];
 const suggestPw = () => 'Aimer@' + Math.floor(1000 + Math.random() * 9000);
 function AddMember({ onClose, onSaved, toast }) {
   const [f, set] = useForm({ name: '', email: '', phone: '', role: 'officer', password: suggestPw() });
@@ -1137,14 +1175,14 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
   return html`
     <div className="head"><div><h1>${isMgr ? 'Young CEO Leads' : `Hello, ${me.name.split(' ')[0]}`}</h1>
       <p>${isMgr ? `${conv}% of leads have paid · ${callsToday.length} call${callsToday.length === 1 ? '' : 's'} logged today` : `${myCalls} call${myCalls === 1 ? '' : 's'} today · ${due.length} lead${due.length === 1 ? '' : 's'} to call`}</p></div>
-      <div className="row"><button className="btn gold" onClick=${() => go('leads', { add: true })}>+ Add lead</button>
-        ${isMgr && html`<button className="btn" onClick=${() => go('leads', { bulk: true })}>Bulk upload</button>`}</div></div>
+      ${!RO && html`<div className="row"><button className="btn gold" onClick=${() => go('leads', { add: true })}>+ Add lead</button>
+        ${isMgr && html`<button className="btn" onClick=${() => go('leads', { bulk: true })}>Bulk upload</button>`}</div>`}</div>
     <div className="seg" style=${{ marginBottom: 14 }} role="tablist" aria-label="Lead type">
       <button className=${!ltype ? 'on' : ''} onClick=${() => pickType('')}>All (${d.leads.length})</button>
       ${LEAD_TYPES.map(t => html`<button key=${t} className=${ltype === t ? 'on' : ''} onClick=${() => pickType(t)}>${t === 'Preliminary Programme' ? 'Preliminary' : t} (${typeCount(t)})</button>`)}
     </div>
     ${isMgr && unassigned > 0 && html`<div className="msg warn row" style=${{ justifyContent: 'space-between', marginBottom: 14 }}><span><b>${unassigned} lead${unassigned === 1 ? ' has' : 's have'} no telecaller.</b> ${callers(team).some(t => t.role === 'telecaller') ? 'Share them out in turn.' : 'Add a telecaller in the Team tab first.'}</span>
-      ${callers(team).some(t => t.role === 'telecaller') && html`<button className="btn sm" onClick=${share}>Share them out</button>`}</div>`}
+      ${!RO && callers(team).some(t => t.role === 'telecaller') && html`<button className="btn sm" onClick=${share}>Share them out</button>`}</div>`}
     <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert ? ' alert' : '')} onClick=${() => go('leads', { ...s.go, ltype })}><div className="num">${s.n}</div><p>${s.l}</p></button>`)}</div>
 
     <div className="grid g2">
@@ -1184,7 +1222,7 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
   const [cat, setCat] = useState(''); const [owner, setOwner] = useState(''); const [follow, setFollow] = useState(params.follow || ''); const [ltype, setLtype] = useState(params.ltype || '');
   const [page, setPage] = useState(0); const [rows, setRows] = useState(null); const [total, setTotal] = useState(0);
   const [sel, setSel] = useState([]); const [bulk, setBulk] = useState(false);
-  useEffect(() => { if (params.add) editLead(null); if (params.bulk && isMgr) setBulk(true); }, []);
+  useEffect(() => { if (RO) return; if (params.add) editLead(null); if (params.bulk && isMgr) setBulk(true); }, []);
   useEffect(() => {
     let alive = true;
     const t = setTimeout(async () => {
@@ -1213,7 +1251,7 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
 
   return html`
     <div className="head"><div><h1>Leads</h1><p>${total} lead${total === 1 ? '' : 's'}${isMgr ? '' : ' assigned to you'}</p></div>
-      <div className="row">${isMgr && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}<button className="btn primary" onClick=${() => editLead(null)}>+ Add lead</button></div></div>
+      <div className="row">${isMgr && !RO && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}${!RO && html`<button className="btn primary" onClick=${() => editLead(null)}>+ Add lead</button>`}</div></div>
     ${bulk && html`<${LeadBulkUpload} me=${me} team=${team} onClose=${() => setBulk(false)} onDone=${bump}/>`}
     <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', marginBottom: 14 }}>
       <input className="input" placeholder="Search name, phone, ID, school…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
@@ -1229,9 +1267,9 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
         <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
           <div className="small muted">${typeTag(l.lead_type)} ${[l.category, l.school_name].filter(Boolean).join(' · ')}</div>
           <div className="small">Next: ${NO_FOLLOW.includes(l.stage) || !l.next_follow_up ? '—' : html`<b>${l.next_action || 'Follow-up'}</b> · <b className=${followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(l.next_follow_up, l.next_action_time)}</b>`}${isMgr ? html`<span className="muted"> · ${nameOf(l.telecaller_id)}</span>` : ''}</div></div></div>`)}</div>
-      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${sel.length === rows.length} onChange=${e => setSel(e.target.checked ? ids : [])}/></th>`}<th>Lead</th><th>Grade / school</th><th>Source</th><th>Stage</th>${isMgr && html`<th>Telecaller</th>`}<th>Last contact</th><th>Next action</th></tr></thead>
+      <div className="card scroll hide-sm"><table><thead><tr>${isMgr && !RO && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${sel.length === rows.length} onChange=${e => setSel(e.target.checked ? ids : [])}/></th>`}<th>Lead</th><th>Grade / school</th><th>Source</th><th>Stage</th>${isMgr && html`<th>Telecaller</th>`}<th>Last contact</th><th>Next action</th></tr></thead>
         <tbody>${rows.map(l => html`<tr key=${l.id} className="click" onClick=${() => openLead(l.id, ids)}>
-          ${isMgr && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + l.name} checked=${sel.includes(l.id)} onChange=${e => setSel(e.target.checked ? [...sel, l.id] : sel.filter(x => x !== l.id))}/></td>`}
+          ${isMgr && !RO && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + l.name} checked=${sel.includes(l.id)} onChange=${e => setSel(e.target.checked ? [...sel, l.id] : sel.filter(x => x !== l.id))}/></td>`}
           <td><b>${l.name}</b> ${l.lead_type === 'Preliminary Programme' ? typeTag(l.lead_type) : ''}<div className="small muted">${l.code} · ${l.phone}</div></td>
           <td>${l.category || '—'}<div className="small muted">${l.school_name || ''}</div></td>
           <td className="small">${l.source}</td><td>${badge(l.stage)}</td>${isMgr && html`<td className="small">${nameOf(l.telecaller_id)}</td>`}
@@ -1355,11 +1393,11 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
     <div className="row" style=${{ marginBottom: 12 }}>
       <a className="btn primary" href=${tel(l.phone)}>${I.phone} Call ${l.phone}</a>
       <a className="btn" href=${wa(l.whatsapp || l.phone)} target="_blank">${I.wa} WhatsApp</a>
-      ${!PAID_STAGES.includes(l.stage) && html`<button className="btn gold" onClick=${sendPayLink}>Send payment link</button>`}
-      ${PAID_STAGES.includes(l.stage) && !l.idea_at && html`<a className="btn gold" href=${waText(l.whatsapp || l.phone, ideaMsg(l, me))} target="_blank" onClick=${() => db.from('lead_activities').insert({ lead_id: l.id, type: 'WhatsApp', remarks: 'Idea form sent', next_follow_up: addDays(todayStr(), 2), next_action: 'Check idea submission', by_user: me.id }).then(() => done('Idea form sent — check back in 2 days'))}>Send idea form</a>`}
+      ${!RO && !PAID_STAGES.includes(l.stage) && html`<button className="btn gold" onClick=${sendPayLink}>Send payment link</button>`}
+      ${!RO && PAID_STAGES.includes(l.stage) && !l.idea_at && html`<a className="btn gold" href=${waText(l.whatsapp || l.phone, ideaMsg(l, me))} target="_blank" onClick=${() => db.from('lead_activities').insert({ lead_id: l.id, type: 'WhatsApp', remarks: 'Idea form sent', next_follow_up: addDays(todayStr(), 2), next_action: 'Check idea submission', by_user: me.id }).then(() => done('Idea form sent — check back in 2 days'))}>Send idea form</a>`}
       ${nextId && html`<button className="btn" onClick=${() => openLead(nextId, queue)}>Skip ›</button>`}
     </div>
-    <${NextBanner} row=${l} actions=${LEAD_ACTIONS} closed=${NO_FOLLOW.includes(l.stage)} onSave=${async v => { const { error } = await db.from('leads').update({ next_action: v.action, next_follow_up: v.date, next_action_time: v.time || null }).eq('id', l.id); if (error) toast(nice(error)); else done('Next action saved'); }}/>
+    <${NextBanner} row=${l} actions=${LEAD_ACTIONS} closed=${NO_FOLLOW.includes(l.stage)} readOnly=${RO} onSave=${async v => { const { error } = await db.from('leads').update({ next_action: v.action, next_follow_up: v.date, next_action_time: v.time || null }).eq('id', l.id); if (error) toast(nice(error)); else done('Next action saved'); }}/>
     <div className="row" style=${{ gap: 4, marginBottom: 16, flexWrap: 'wrap' }} aria-label="Progress">
       ${PIPELINE.map((s, i) => html`<span key=${s} className="small" style=${{ padding: '3px 9px', borderRadius: 99, fontWeight: 600,
         background: i <= stepIdx ? (i >= 4 ? 'color-mix(in srgb,var(--ok) 16%,transparent)' : 'var(--brand-tint)') : 'var(--paper)',
@@ -1367,8 +1405,8 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
       ${stepIdx < 0 && badge(l.stage)}
     </div>
 
-    <div className="seg" style=${{ marginBottom: 12 }}>${tabs.map(([k, t]) => html`<button key=${k} className=${panel === k ? 'on' : ''} onClick=${() => setPanel(k)}>${t}</button>`)}</div>
-    ${panel === 'call' && html`<div className="card pad" style=${{ marginBottom: 16 }}>
+    ${!RO && html`<div className="seg" style=${{ marginBottom: 12 }}>${tabs.map(([k, t]) => html`<button key=${k} className=${panel === k ? 'on' : ''} onClick=${() => setPanel(k)}>${t}</button>`)}</div>`}
+    ${!RO && panel === 'call' && html`<div className="card pad" style=${{ marginBottom: 16 }}>
       <div className="chips" role="radiogroup" aria-label="Call outcome">${CALL_OUTCOMES.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${out === o} className=${'chip' + (out === o ? ' on' : '')} onClick=${() => pickOutcome(o)}>${o}</button>`)}</div>
       <div className="form two" style=${{ marginTop: 12 }}>
         <${Field} label="Remarks" full><textarea className="input" rows="2" value=${remarks} onInput=${e => setRemarks(e.target.value)} placeholder="What did they say?"/><//>
@@ -1378,19 +1416,19 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
       <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${logCall}>${busy ? 'Saving…' : nextId ? 'Save & next lead' : 'Save call'}</button>
       ${l.no_answer_count > 0 && !PAID_STAGES.includes(l.stage) && html`<span className="small muted" style=${{ marginLeft: 10 }}>${l.no_answer_count} unanswered in a row${l.no_answer_count >= 2 ? ' — one more moves it to Not reachable' : ''}</span>`}
     </div>`}
-    ${panel === 'pay' && html`<div className="card pad" style=${{ marginBottom: 16 }}><div className="form two">
+    ${!RO && panel === 'pay' && html`<div className="card pad" style=${{ marginBottom: 16 }}><div className="form two">
       <${Field} label="Amount (₹)"><input className="input" type="number" min="1" value=${pay.amount} onInput=${e => setPay({ ...pay, amount: e.target.value })}/><//>
       <${Field} label="Paid on"><input className="input" type="date" max=${todayStr()} value=${pay.date} onInput=${e => setPay({ ...pay, date: e.target.value })}/><//>
       <${Field} label="Transaction / UTR ID *"><input className="input" value=${pay.ref} onInput=${e => setPay({ ...pay, ref: e.target.value })} placeholder="From the payment screenshot"/><//>
       <${Field} label="Mode"><${Select} value=${pay.mode} onChange=${v => setPay({ ...pay, mode: v })} options=${PAY_MODES}/><//></div>
       <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${markPaid}>${busy ? 'Saving…' : 'Mark as paid'}</button></div>`}
-    ${panel === 'idea' && html`<div className="card pad" style=${{ marginBottom: 16 }}><div className="form two">
+    ${!RO && panel === 'idea' && html`<div className="card pad" style=${{ marginBottom: 16 }}><div className="form two">
       <${Field} label="Idea title" full><input className="input" value=${idea.title} onInput=${e => setIdea({ ...idea, title: e.target.value })} placeholder="e.g. Campus snack delivery app"/><//>
       <${Field} label="Link (Drive / form response)"><input className="input" type="url" value=${idea.link} onInput=${e => setIdea({ ...idea, link: e.target.value })}/><//>
       <${Field} label="Submitted on"><input className="input" type="date" max=${todayStr()} value=${idea.date} onInput=${e => setIdea({ ...idea, date: e.target.value })}/><//></div>
       <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${markIdea}>${busy ? 'Saving…' : 'Mark idea submitted'}</button></div>`}
 
-    ${isMgr && html`<div className="form two" style=${{ marginBottom: 16 }}>
+    ${isMgr && !RO && html`<div className="form two" style=${{ marginBottom: 16 }}>
       <${Field} label="Telecaller"><${Select} value=${l.telecaller_id || ''} onChange=${reassign} options=${callers(team).map(t => ({ value: t.id, label: t.name }))} blank="Unassigned"/><//>
       <${Field} label="Change stage (corrections)"><${Select} value=${l.stage} onChange=${setStage} options=${LEAD_STAGES}/><//></div>`}
 
@@ -1399,7 +1437,7 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
       <div className="small muted">${fDateTime(h.created_at)} · ${nameOf(h.by_user)}${h.next_follow_up ? ' · next: ' + (h.next_action || 'follow-up') + ', ' + whenText(h.next_follow_up, h.next_action_time) : ''}</div>${h.remarks && html`<div className="small">${h.remarks}</div>`}</div>`)}</div>` : html`<p className="muted small">No activity yet. Make the first call.</p>`}
     <h3 style=${{ margin: '20px 0 10px' }}>Details</h3>
     <div className="card list">${info.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 110, flex: 'none' }}>${k}</span><span style=${{ wordBreak: 'break-word' }}>${v || '—'}</span></div>`)}</div>
-    <div className="row" style=${{ marginTop: 14 }}><button className="btn" onClick=${() => editLead(l)}>Edit details</button>${isMgr && l.school_id && openSchool ? html`<button className="btn" onClick=${() => openSchool(l.school_id)}>Open school</button>` : ''}${me.role === 'admin' && html`<button className="btn danger" onClick=${del}>Delete lead</button>`}</div>
+    <div className="row" style=${{ marginTop: 14 }}>${!RO && html`<button className="btn" onClick=${() => editLead(l)}>Edit details</button>`}${isMgr && l.school_id && openSchool ? html`<button className="btn" onClick=${() => openSchool(l.school_id)}>Open school</button>` : ''}${me.role === 'admin' && html`<button className="btn danger" onClick=${del}>Delete lead</button>`}</div>
   <//>`;
 }
 
@@ -2006,6 +2044,7 @@ function App() {
     reloadTeam().then(t => setMe(t.find(x => x.id === session.user.id) || { missing: true })); }, [session?.user?.id]);
 
   const go = (t, p = {}) => { setParams(p); setTab(t); setModal(null); setStack([]); scrollTo(0, 0); };
+  useEffect(() => { if (me?.role === 'ceo') setTab('insights'); }, [me?.role]);
   const open = m => { setStack(s => modal ? [...s, modal] : s); setModal(m); };
   const close = () => { setModal(stack.at(-1) || null); setStack(s => s.slice(0, -1)); };
   const openSchool = id => open({ k: 'school', id });
@@ -2021,11 +2060,12 @@ function App() {
   if (!me) return html`<p className="wrap muted">Loading…</p>`;
   if (me.missing || !me.active) return html`<div className="login"><div className="card pad"><h2>No access</h2><p className="soft">Your account isn’t active in the CRM. Ask the admin to activate you.</p><button className="btn" onClick=${() => db.auth.signOut()}>Sign out</button></div></div>`;
 
+  RO = me.role === 'ceo';
   const canOutreach = me.role !== 'telecaller', canLeads = me.role !== 'officer', both = canOutreach && canLeads;
   const m = !canLeads ? 'outreach' : !canOutreach ? 'leads' : mode;
   const setMode = x => { try { localStorage.setItem('yceo-mode', x); } catch {} setModeState(x); go(x === 'leads' ? 'ldash' : 'dashboard'); };
   const admin = me.role === 'admin' ? [['team', 'Team', I.team]] : [];
-  const ins = ['admin', 'coordinator', 'manager'].includes(me.role) ? [['insights', 'Insights', I.insight]] : [];
+  const ins = ['admin', 'coordinator', 'manager', 'ceo'].includes(me.role) ? [['insights', 'Insights', I.insight]] : [];
   const tabs = m === 'leads'
     ? [['ldash', 'Dashboard', I.home], ['leads', 'Leads', I.lead], ['lreports', 'Reports', I.chart], ...ins, ...admin, ...(me.role === 'admin' ? [['connect', 'Connect', I.plug]] : [])]
     : [['dashboard', 'Dashboard', I.home], ['schools', 'Schools', I.school], ['programmes', 'Programmes', I.cal], ['reports', 'Reports', I.chart], ...ins, ...admin];
@@ -2038,7 +2078,7 @@ function App() {
     <header className="top"><div className="in"><${Logo}/>
       ${both && html`<div className="mode-desk"><${ModeSwitch}/></div>`}
       <nav className="tabs">${tabs.map(([k, l]) => html`<button key=${k} className=${'tab' + (cur === k ? ' on' : '')} onClick=${() => go(k)}>${l}</button>`)}</nav>
-      <div className="who"><b>${me.name}</b><button className="small" style=${{ border: 0, background: 'none', color: 'var(--muted)', padding: 0, cursor: 'pointer' }} onClick=${() => db.auth.signOut()}>Sign out</button></div></div></header>
+      <div className="who"><b>${me.name}</b>${RO ? html`<span className="small" style=${{ color: 'var(--brand)', fontWeight: 600, marginRight: 8 }}>View only ·</span>` : ''}<button className="small" style=${{ border: 0, background: 'none', color: 'var(--muted)', padding: 0, cursor: 'pointer' }} onClick=${() => db.auth.signOut()}>Sign out</button></div></div></header>
     ${both && html`<div className="mode-mob"><${ModeSwitch}/></div>`}
     <main className="wrap" key=${m + cur + JSON.stringify(params)}>
       ${cur === 'dashboard' && html`<${Dashboard} ...${P} go=${go} key=${refreshKey}/>`}

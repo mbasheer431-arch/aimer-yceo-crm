@@ -154,6 +154,12 @@ td{padding:11px 14px;border-top:1px solid var(--line);font-size:14px;vertical-al
 .viz-tip{position:absolute;top:0;width:150px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 14px rgba(0,0,0,.12);pointer-events:none}
 @media(min-width:900px){.g2e{grid-template-columns:1fr 1fr}}
 .kpis{grid-template-columns:repeat(2,1fr)} @media(min-width:900px){.kpis{grid-template-columns:repeat(4,1fr)}}
+.temp-hot{background:color-mix(in srgb,#E5484D 16%,transparent);color:#C62A2F}.temp-warm{background:color-mix(in srgb,#E8A317 20%,transparent);color:#9A6700}.temp-cold{background:color-mix(in srgb,#4A79C8 16%,transparent);color:#3563AE}
+@media (prefers-color-scheme:dark){.temp-hot{color:#FF8589}.temp-warm{color:#F5C451}.temp-cold{color:#8DB3F2}}
+.pills{display:flex;flex-wrap:wrap;gap:6px}.pill{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:5px 11px;font-size:12.5px;cursor:pointer;color:var(--soft)}.pill:hover{border-color:var(--brand);color:var(--brand)}
+.pill.on{border-color:var(--brand);background:var(--brand-tint);color:var(--brand);font-weight:600}
+.lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+.meter{height:10px;border-radius:5px;background:color-mix(in srgb,var(--line) 50%,transparent);overflow:hidden;margin-top:6px}.meter i{display:block;height:100%;border-radius:5px;background:var(--brand)}
 .dot{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}
 </style>
 </head>
@@ -177,12 +183,16 @@ const STATUSES = ['New','Contacted','Interested','Confirmed','Programme schedule
 const TYPES = ['Call','School visit','Principal meeting','Coordinator meeting','WhatsApp','Email','Follow-up'];
 // Team-managed lists (activity types, school stages) — loaded from Supabase; these arrays are updated in place
 const LISTS = { rows: [] };
+const LEAD_REASONS = ['₹299 fee — not willing','Parents not agreeing','Exams / no time','Not interested in business','Not eligible (age / grade)','Will register later','Already registered','Didn’t fill the form / fake lead'];
+const LEAD_ACT_TYPES = ['WhatsApp chat','Details sent'];
 async function loadLists() {
   const { data, error } = await db.from('lists').select('id,kind,label,sort,active,is_system').order('sort');
   if (error || !data?.length) return false;            // before update-shared-schools.sql: keep built-in lists
   LISTS.rows = data;
   const act = k => data.filter(r => r.kind === k && r.active).map(r => r.label);
   TYPES.splice(0, TYPES.length, ...act('activity_type')); STATUSES.splice(0, STATUSES.length, ...act('school_stage'));
+  if (act('lead_reason').length) LEAD_REASONS.splice(0, LEAD_REASONS.length, ...act('lead_reason'));
+  if (act('lead_activity').length) LEAD_ACT_TYPES.splice(0, LEAD_ACT_TYPES.length, ...act('lead_activity'));
   return true;
 }
 async function addListItem(kind, label) {
@@ -201,12 +211,12 @@ function AddItem({ kind, onAdded, toast, label }) {
   const save = async () => { setBusy(true); try { const l = await addListItem(kind, v); toast(`“${l}” added for the whole team`); setV(''); setOpen(false); onAdded(l); } catch (e) { toast(e.message); } setBusy(false); };
   if (!open) return html`<button type="button" className="chip" style=${{ borderStyle: 'dashed', color: 'var(--brand)' }} onClick=${() => setOpen(true)}>${label || '+ Add'}</button>`;
   return html`<div className="row" style=${{ flexWrap: 'nowrap', gridColumn: '1 / -1' }}>
-    <input className="input" autoFocus value=${v} maxLength="40" placeholder=${kind === 'activity_type' ? 'e.g. Demo session' : 'e.g. Proposal sent'} onInput=${e => setV(e.target.value)}
+    <input className="input" autoFocus value=${v} maxLength="40" placeholder=${{ activity_type: 'e.g. Demo session', school_stage: 'e.g. Proposal sent', lead_activity: 'e.g. Parent meeting', lead_reason: 'e.g. Already in another camp' }[kind]} onInput=${e => setV(e.target.value)}
       onKeyDown=${e => { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') setOpen(false); }}/>
     <button type="button" className="btn sm primary" disabled=${busy} onClick=${save}>Add</button><button type="button" className="btn sm" onClick=${() => setOpen(false)}>Cancel</button></div>`;
 }
 // Coordinator / admin: rename, hide, reorder activity types and stages
-function ListsManager({ onClose, toast, onChanged }) {
+function ListsManager({ onClose, toast, onChanged, leads }) {
   const [rows, setRows] = useState(LISTS.rows); const [edit, setEdit] = useState({});
   const refresh = async () => { await loadLists(); setRows([...LISTS.rows]); onChanged(); };
   const move = async (kind, i, dir) => {
@@ -224,8 +234,13 @@ function ListsManager({ onClose, toast, onChanged }) {
         <div className="grow">${edit[r.id] !== undefined ? html`<input className="input" value=${edit[r.id]} maxLength="40" autoFocus onInput=${e => setEdit({ ...edit, [r.id]: e.target.value })} onKeyDown=${e => e.key === 'Enter' && rename(r)}/>` : html`<b>${r.label}</b>${r.is_system ? html` <span className="badge">Built-in</span>` : ''}`}</div>
         ${!r.is_system && (edit[r.id] !== undefined ? html`<button className="btn sm primary" onClick=${() => rename(r)}>Save</button>` : html`<button className="btn sm" onClick=${() => setEdit({ ...edit, [r.id]: r.label })}>Rename</button><button className="btn sm" onClick=${() => toggle(r, false)}>Hide</button>`)}
       </div>`)}</div>
-      <div className="chips" style=${{ marginTop: 8, gridTemplateColumns: '1fr' }}><${AddItem} kind=${kind} toast=${toast} onAdded=${refresh} label=${kind === 'activity_type' ? '+ Add activity type' : '+ Add stage'}/></div>
+      <div className="chips" style=${{ marginTop: 8, gridTemplateColumns: '1fr' }}><${AddItem} kind=${kind} toast=${toast} onAdded=${refresh} label=${{ activity_type: '+ Add activity type', school_stage: '+ Add stage', lead_activity: '+ Add activity', lead_reason: '+ Add reason' }[kind]}/></div>
       ${hidden.length > 0 && html`<p className="small muted" style=${{ margin: '10px 0 4px' }}>Hidden</p><div className="row">${hidden.map(r => html`<button key=${r.id} className="btn sm" onClick=${() => toggle(r, true)}>Show “${r.label}”</button>`)}</div>`}</div>`; };
+  if (leads) return html`<${Modal} title="Lead activities & reasons" sub="Telecallers can add new ones while logging. Here you can rename, hide and reorder them." onClose=${onClose}>
+    ${!rows.some(r => r.kind === 'lead_reason') ? html`<div className="msg warn">Run update-telecaller-tools.sql in Supabase to turn on these lists.</div>` : ''}
+    ${section('lead_reason', 'Why leads don’t register', 'Shown when a call ends as Not interested, and as “concern raised” on other calls.')}
+    ${section('lead_activity', 'Other activities', 'Shown under “Other activity” on a lead (calls are logged separately).')}
+  <//>`;
   return html`<${Modal} title="Activity types & school stages" sub="Officers can add new ones while logging outreach. Here you can rename, hide and reorder them." onClose=${onClose}>
     ${!rows.length ? html`<div className="msg warn">Run update-shared-schools.sql in Supabase to turn on custom lists.</div>` : ''}
     ${section('activity_type', 'Activity types', 'Shown as buttons when logging outreach.')}
@@ -266,6 +281,10 @@ function suggestLead(outcome, lead) {
   if (outcome === 'Not interested' || outcome === 'Wrong number') return [null, null, ''];
   if (paid) return outcome === 'Interested' || outcome === 'Connected' ? ['Check idea submission', addDays(t, 2), ''] : ['Send idea form', ...laterToday(3)];
   if (outcome === 'Interested') return ['Send payment link', t, ''];
+  if (outcome === 'Will register today') return ['Check payment', ...laterToday(3)];
+  if (outcome === 'Says already paid') return ['Check payment', t, ''];
+  if (outcome === 'Parent to decide') return ['Call parent', addDays(t, 1), '18:00'];
+  if (outcome === 'Needs details') return ['WhatsApp follow-up', t, ''];
   if (outcome === 'Connected') return lead.stage === 'Payment pending' ? ['Check payment', addDays(t, 1), ''] : ['Follow-up call', addDays(t, 2), ''];
   if (outcome === 'Call back later') return ['Follow-up call', ...laterToday(3)];
   if (['No answer','Busy','Switched off'].includes(outcome)) return miss >= 1 ? ['WhatsApp follow-up', t, ''] : ['Follow-up call', ...laterToday(3)];
@@ -1114,7 +1133,32 @@ function CityBox({ value, district, onChange }) {
 }
 const LEAD_SOURCES = ['Meta Ads','Website','Preliminary programme','Referral','Walk-in / call','School outreach','Other'];
 const LEAD_CATS = ['Grade 9','Grade 10','Grade 11','Grade 12','UG final year','Other'];
-const CALL_OUTCOMES = ['Connected','Interested','Call back later','No answer','Busy','Switched off','Not interested','Wrong number'];
+const CALL_REACHED = ['Will register today','Interested','Parent to decide','Needs details','Call back later','Says already paid','Not interested'];
+const CALL_MISSED = ['No answer','Busy','Switched off','Wrong number'];
+const CALL_OUTCOMES = [...CALL_REACHED, ...CALL_MISSED];
+const TEMPS = ['Hot','Warm','Cold'];
+const SPOKE_TO = ['Student','Father','Mother','Other'];
+const SETTABLE_STAGES = ['New','Contacted','Interested','Payment pending','Not reachable','Not interested','Wrong number'];
+const QUICK = {
+  reached: ['Explained programme & prizes','Sent payment link','Will pay today','Will pay after asking parents','Asked about the ₹299 fee','Asked about dates & venue','Exams now — call later','Call after 6 pm','Paid — waiting for screenshot','Payment failed — resent link'],
+  missed: ['Ringing, no answer','Sent WhatsApp message','Call disconnected','Busy all day'],
+  activity: ['Sent programme details','Sent payment link','Answered questions','Shared brochure / poster','Sent reminder'] };
+const tempTag = t => t ? html`<span className=${'badge temp-' + t.toLowerCase()}>${t}</span>` : '';
+// What the stage should become after a call (the telecaller can change it)
+function suggestLeadStage(o, l) {
+  const st = l.stage;
+  if (PAID_STAGES.includes(st)) return st;
+  if (o === 'Not interested' || o === 'Wrong number') return o;
+  if (o === 'Will register today' || o === 'Says already paid') return 'Payment pending';
+  if (o === 'Interested' || o === 'Parent to decide') return st === 'Payment pending' ? st : 'Interested';
+  if (o === 'Needs details' || o === 'Call back later') return ['New', 'Not reachable', 'Not interested', 'Wrong number'].includes(st) ? 'Contacted' : st;
+  if (CALL_MISSED.includes(o)) return (l.no_answer_count || 0) + 1 >= 3 && ['New', 'Contacted'].includes(st) ? 'Not reachable' : st;
+  return st;
+}
+const suggestTemp = (o, l) => ({ 'Will register today': 'Hot', 'Says already paid': 'Hot', 'Interested': 'Warm', 'Parent to decide': 'Warm', 'Needs details': 'Warm', 'Not interested': 'Cold', 'Wrong number': '' })[o] ?? (l.temperature || '');
+const appendRemark = (r, q) => r.trim() ? r.trim().replace(/[.\s]*$/, '') + '. ' + q : q;
+// Pill picker (single choice; click again to clear unless required)
+const Pills = ({ options, value, onChange, required, label }) => html`<div className="pills" role="radiogroup" aria-label=${label}>${options.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${value === o} className=${'pill' + (value === o ? ' on' : '')} onClick=${() => onChange(value === o && !required ? '' : o)}>${o}</button>`)}</div>`;
 const PAY_MODES = ['UPI','Card','Net banking','Bank transfer','Cash'];
 const istDate = iso => iso ? new Date(new Date(iso).getTime() + 5.5 * 3600e3).toISOString().slice(0, 10) : null;
 const callers = team => team.filter(t => t.active && ['telecaller', 'coordinator'].includes(t.role));
@@ -1124,16 +1168,36 @@ const payMsg = (lead, me) => `Hi ${lead.name.split(' ')[0]}, this is ${me.name.s
 const ideaMsg = (lead, me) => `Hi ${lead.name.split(' ')[0]}, thank you for registering for Aimer Young CEO 2.0! 🎉\n\nNext step: submit your business idea here:\n${C.IDEA_FORM_LINK || '[idea submission link]'}\n\n— ${me.name.split(' ')[0]}, AIMER Business School`;
 const waText = (n, text) => n ? wa(n) + '?text=' + encodeURIComponent(text) : null;
 
+/* ---------- Daily targets (coordinator / admin) ---------- */
+function Targets({ team, onClose, toast, reloadTeam }) {
+  const people = callers(team);
+  const [v, setV] = useState(() => Object.fromEntries(people.map(t => [t.id, { c: t.target_calls ?? 60, p: t.target_paid ?? 3 }])));
+  const [busy, setBusy] = useState(false);
+  const save = async () => { setBusy(true);
+    for (const t of people) { const { error } = await db.rpc('set_daily_targets', { p_id: t.id, p_calls: +v[t.id].c || 0, p_paid: +v[t.id].p || 0 });
+      if (error) { setBusy(false); return toast(/set_daily_targets/.test(error.message) ? 'Run update-telecaller-tools.sql in Supabase first.' : nice(error)); } }
+    await reloadTeam?.(); setBusy(false); toast('Targets saved'); onClose(); };
+  return html`<${Modal} title="Daily targets" sub="Each telecaller sees their progress on their dashboard." onClose=${onClose}>
+    ${people.length ? html`<div className="card scroll"><table><thead><tr><th>Telecaller</th><th>Calls per day</th><th>Registrations per day</th></tr></thead><tbody>
+      ${people.map(t => html`<tr key=${t.id}><td><b>${t.name}</b></td>
+        <td><input className="input" type="number" min="0" style=${{ width: 100 }} value=${v[t.id].c} onInput=${e => setV({ ...v, [t.id]: { ...v[t.id], c: e.target.value } })} aria-label=${'Calls per day for ' + t.name}/></td>
+        <td><input className="input" type="number" min="0" style=${{ width: 100 }} value=${v[t.id].p} onInput=${e => setV({ ...v, [t.id]: { ...v[t.id], p: e.target.value } })} aria-label=${'Registrations per day for ' + t.name}/></td></tr>`)}
+    </tbody></table></div>
+    <div className="row" style=${{ marginTop: 14 }}><button className="btn primary" disabled=${busy} onClick=${save}>${busy ? 'Saving…' : 'Save targets'}</button><button className="btn" onClick=${onClose}>Cancel</button></div>`
+    : html`<p className="muted">Add telecallers in the Team tab first.</p>`}
+  <//>`;
+}
+
 /* ---------- Lead dashboard ---------- */
-function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
-  const [d, setD] = useState(null);
+function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey, reloadTeam }) {
+  const [d, setD] = useState(null); const [targets, setTargets] = useState(false);
   const [ltype, setLtype] = useState(() => { try { return localStorage.getItem('yceo-ltype') || ''; } catch { return ''; } });
   const pickType = t => { setLtype(t); try { localStorage.setItem('yceo-ltype', t); } catch {} };
   const isMgr = me.role !== 'telecaller';
   const load = async () => {
     const today = todayStr();
     const [leads, acts] = await Promise.all([
-      fetchAll(() => db.from('leads').select('id,name,phone,whatsapp,stage,source,campaign,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,created_at,paid_at,amount,idea_at,no_answer_count,lead_type')),
+      fetchAll(() => db.from('leads').select('id,name,phone,whatsapp,stage,source,campaign,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,created_at,paid_at,amount,idea_at,no_answer_count,lead_type,temperature')),
       fetchAll(() => db.from('lead_activities').select('type,outcome,by_user,created_at').gte('created_at', today + 'T00:00:00+05:30')),
     ]);
     setD({ leads, acts, today });
@@ -1165,12 +1229,37 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
     return { id: t.id, name: t.name + (t.role === 'coordinator' ? ' (Coordinator)' : ''), leads: mine.length,
       calls: callsToday.filter(a => a.by_user === t.id).length, fresh: mine.filter(l => l.stage === 'New').length,
       due: mine.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up <= today).length,
-      paid: p.length, conv: mine.length ? Math.round(p.length / mine.length * 100) : 0 };
+      paid: p.length, conv: mine.length ? Math.round(p.length / mine.length * 100) : 0,
+      tC: t.target_calls ?? 60, tP: t.target_paid ?? 3, pt: mine.filter(l => l.paid_at === today).length };
   }).sort((a, b) => b.paid - a.paid || b.calls - a.calls);
   const sources = Object.entries(leads.reduce((m, l) => { const k = l.source || 'Other'; (m[k] ||= []).push(l); return m; }, {}))
     .map(([k, v]) => ({ k, n: v.length, p: v.filter(l => PAID_STAGES.includes(l.stage)).length })).sort((a, b) => b.n - a.n);
   const share = async () => { const { data, error } = await db.rpc('distribute_unassigned_leads'); if (error) toast(nice(error)); else { toast(`${data} leads shared among telecallers`); bump(); } };
   const queue = due.map(l => l.id);
+  // My day (telecaller): progress vs target and the order to call in
+  const myCallsToday = callsToday.filter(a => a.by_user === me.id);
+  const reachedToday = myCallsToday.filter(a => CALL_REACHED.includes(a.outcome) || a.outcome === 'Connected').length;
+  const warmToday = myCallsToday.filter(a => ['Will register today', 'Interested', 'Parent to decide', 'Says already paid'].includes(a.outcome)).length;
+  const paidToday = id => leads.filter(l => l.paid_at === today && l.telecaller_id === id).length;
+  const tC = me.target_calls ?? 60, tP = me.target_paid ?? 3;
+  const open = l => !NO_FOLLOW.includes(l.stage) && !PAID_STAGES.includes(l.stage);
+  const overdue = due.filter(l => l.next_follow_up < today).sort(byWhen), dueToday = due.filter(l => l.next_follow_up === today).sort(byWhen);
+  const fresh = leads.filter(l => l.stage === 'New' && !(l.next_follow_up && l.next_follow_up <= today));
+  const hot = leads.filter(l => l.temperature === 'Hot' && open(l) && !(l.next_follow_up && l.next_follow_up <= today));
+  const myQueue = [...new Set([...overdue, ...dueToday, ...fresh, ...hot].map(l => l.id))];
+  const meter = (n, t) => html`<div className="meter"><i style=${{ width: Math.min(100, t ? n / t * 100 : 0) + '%', background: t && n >= t ? 'var(--ok)' : 'var(--brand)' }}/></div>`;
+  const myDay = !isMgr && html`<div className="card pad" style=${{ marginBottom: 16 }}>
+    <div className="row" style=${{ justifyContent: 'space-between' }}><h2>My day</h2>
+      ${myQueue.length > 0 && html`<button className="btn primary" onClick=${() => openLead(myQueue[0], myQueue)}>${I.phone} Start calling (${myQueue.length})</button>`}</div>
+    <div className="grid g2" style=${{ marginTop: 12, gap: 18 }}>
+      <div><div className="row small" style=${{ justifyContent: 'space-between' }}><span>Calls today</span><b>${myCallsToday.length} / ${tC}</b></div>${meter(myCallsToday.length, tC)}
+        <p className="small soft" style=${{ margin: '6px 0 0' }}>${reachedToday} reached · ${myCallsToday.length - reachedToday} not reached · ${warmToday} interested</p></div>
+      <div><div className="row small" style=${{ justifyContent: 'space-between' }}><span>Registrations today (₹${fee()})</span><b>${paidToday(me.id)} / ${tP}</b></div>${meter(paidToday(me.id), tP)}
+        <p className="small soft" style=${{ margin: '6px 0 0' }}>${leads.filter(l => l.stage === 'Payment pending').length} waiting for payment</p></div>
+    </div>
+    <div className="row small" style=${{ marginTop: 14, gap: 8 }}><span className="muted">Call in this order:</span>
+      ${[[overdue, 'Overdue', 'bad'], [dueToday, 'Due today', 'warn'], [fresh, 'New, not called', ''], [hot, 'Hot leads', '']].map(([arr, label, cls], i) => html`<button key=${label} className="pill" disabled=${!arr.length} onClick=${() => { const ids = arr.map(l => l.id); openLead(ids[0], ids); }}>${i + 1}. ${label} <b className=${cls}>${arr.length}</b></button>`)}</div>
+  </div>`;
 
   return html`
     <div className="head"><div><h1>${isMgr ? 'Young CEO Leads' : `Hello, ${me.name.split(' ')[0]}`}</h1>
@@ -1183,6 +1272,8 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
     </div>
     ${isMgr && unassigned > 0 && html`<div className="msg warn row" style=${{ justifyContent: 'space-between', marginBottom: 14 }}><span><b>${unassigned} lead${unassigned === 1 ? ' has' : 's have'} no telecaller.</b> ${callers(team).some(t => t.role === 'telecaller') ? 'Share them out in turn.' : 'Add a telecaller in the Team tab first.'}</span>
       ${!RO && callers(team).some(t => t.role === 'telecaller') && html`<button className="btn sm" onClick=${share}>Share them out</button>`}</div>`}
+    ${myDay}
+    ${targets && html`<${Targets} team=${team} onClose=${() => setTargets(false)} toast=${toast} reloadTeam=${reloadTeam}/>`}
     <div className="stats">${stats.map(s => html`<button key=${s.l} className=${'stat' + (s.alert ? ' alert' : '')} onClick=${() => go('leads', { ...s.go, ltype })}><div className="num">${s.n}</div><p>${s.l}</p></button>`)}</div>
 
     <div className="grid g2">
@@ -1204,10 +1295,10 @@ function LeadDashboard({ me, team, go, openLead, toast, bump, refreshKey }) {
     </div>
 
     ${isMgr && html`<div className="grid g2" style=${{ marginTop: 16 }}>
-      <div className="card scroll"><div className="item"><h2>Telecaller performance</h2></div>
-        <table><thead><tr><th>Telecaller</th><th className="r">Leads</th><th className="r">Calls today</th><th className="r">Not called</th><th className="r">Due</th><th className="r">Paid</th><th className="r">Conv.</th></tr></thead>
-        <tbody>${people.map(o => html`<tr key=${o.id}><td><b>${o.name}</b></td><td className="r">${o.leads}</td><td className="r">${o.calls}</td><td className=${'r' + (o.fresh ? ' warn' : '')}>${o.fresh}</td><td className=${'r' + (o.due ? ' bad' : '')}>${o.due}</td><td className="r ok"><b>${o.paid}</b></td><td className="r">${o.conv}%</td></tr>`)}
-        ${!people.length && html`<tr><td colSpan="7" className="muted">Add telecallers in the Team tab.</td></tr>`}</tbody></table></div>
+      <div className="card scroll"><div className="item"><h2 className="grow">Telecaller performance</h2>${!RO && html`<button className="btn sm" onClick=${() => setTargets(true)}>Daily targets</button>`}</div>
+        <table><thead><tr><th>Telecaller</th><th className="r">Leads</th><th className="r">Calls today</th><th className="r">Paid today</th><th className="r">Not called</th><th className="r">Due</th><th className="r">Paid</th><th className="r">Conv.</th></tr></thead>
+        <tbody>${people.map(o => html`<tr key=${o.id}><td><b>${o.name}</b></td><td className="r">${o.leads}</td><td className=${'r' + (o.calls >= o.tC ? ' ok' : '')}>${o.calls} <span className="muted">/ ${o.tC}</span></td><td className=${'r' + (o.pt >= o.tP && o.tP ? ' ok' : '')}>${o.pt} <span className="muted">/ ${o.tP}</span></td><td className=${'r' + (o.fresh ? ' warn' : '')}>${o.fresh}</td><td className=${'r' + (o.due ? ' bad' : '')}>${o.due}</td><td className="r ok"><b>${o.paid}</b></td><td className="r">${o.conv}%</td></tr>`)}
+        ${!people.length && html`<tr><td colSpan="8" className="muted">Add telecallers in the Team tab.</td></tr>`}</tbody></table></div>
       <div className="card scroll"><div className="item"><h2>Where leads come from</h2></div>
         <table><thead><tr><th>Source</th><th className="r">Leads</th><th className="r">Paid</th><th className="r">Conv.</th></tr></thead>
         <tbody>${sources.map(s => html`<tr key=${s.k} className="click" onClick=${() => go('leads', { source: s.k })}><td><b>${s.k}</b></td><td className="r">${s.n}</td><td className="r ok">${s.p}</td><td className="r">${Math.round(s.p / s.n * 100)}%</td></tr>`)}
@@ -1220,14 +1311,15 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
   const isMgr = me.role !== 'telecaller';
   const [q, setQ] = useState(''); const [stage, setStage] = useState(params.stage || ''); const [source, setSource] = useState(params.source || '');
   const [cat, setCat] = useState(''); const [owner, setOwner] = useState(''); const [follow, setFollow] = useState(params.follow || ''); const [ltype, setLtype] = useState(params.ltype || '');
+  const [temp, setTemp] = useState(params.temp || ''); const [lists, setLists] = useState(false);
   const [page, setPage] = useState(0); const [rows, setRows] = useState(null); const [total, setTotal] = useState(0);
   const [sel, setSel] = useState([]); const [bulk, setBulk] = useState(false);
   useEffect(() => { if (RO) return; if (params.add) editLead(null); if (params.bulk && isMgr) setBulk(true); }, []);
   useEffect(() => {
     let alive = true;
     const t = setTimeout(async () => {
-      let x = db.from('leads').select('id,code,name,phone,stage,source,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,last_contact,created_at,lead_type', { count: 'exact' });
-      if (ltype) x = x.eq('lead_type', ltype);
+      let x = db.from('leads').select('id,code,name,phone,stage,source,category,school_name,district,telecaller_id,next_follow_up,next_action,next_action_time,last_contact,created_at,lead_type,temperature,last_outcome', { count: 'exact' });
+      if (ltype) x = x.eq('lead_type', ltype); if (temp) x = x.eq('temperature', temp);
       const s = clean(q); if (s) x = x.or(`name.ilike.%${s}%,phone.ilike.%${s}%,code.ilike.%${s}%,school_name.ilike.%${s}%,email.ilike.%${s}%`);
       if (stage) x = x.eq('stage', stage); if (source) x = x.eq('source', source); if (cat) x = x.eq('category', cat);
       if (owner === 'none') x = x.is('telecaller_id', null); else if (owner) x = x.eq('telecaller_id', owner);
@@ -1240,8 +1332,8 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
       if (alive) { setRows(data || []); setTotal(count || 0); setSel([]); }
     }, 250);
     return () => { alive = false; clearTimeout(t); };
-  }, [q, stage, source, cat, owner, follow, ltype, page, refreshKey]);
-  useEffect(() => setPage(0), [q, stage, source, cat, owner, follow, ltype]);
+  }, [q, stage, source, cat, owner, follow, ltype, temp, page, refreshKey]);
+  useEffect(() => setPage(0), [q, stage, source, cat, owner, follow, ltype, temp]);
   const nameOf = id => team.find(t => t.id === id)?.name || 'Unassigned';
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const assign = async to => { if (!sel.length) return;
@@ -1251,12 +1343,14 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
 
   return html`
     <div className="head"><div><h1>Leads</h1><p>${total} lead${total === 1 ? '' : 's'}${isMgr ? '' : ' assigned to you'}</p></div>
-      <div className="row">${isMgr && !RO && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}${!RO && html`<button className="btn primary" onClick=${() => editLead(null)}>+ Add lead</button>`}</div></div>
+      <div className="row">${isMgr && !RO && html`<button className="btn" onClick=${() => setLists(true)}>Reasons & activities</button>`}${isMgr && !RO && html`<button className="btn" onClick=${() => setBulk(true)}>Bulk upload</button>`}${!RO && html`<button className="btn primary" onClick=${() => editLead(null)}>+ Add lead</button>`}</div></div>
     ${bulk && html`<${LeadBulkUpload} me=${me} team=${team} onClose=${() => setBulk(false)} onDone=${bump}/>`}
+    ${lists && html`<${ListsManager} leads onClose=${() => setLists(false)} toast=${toast} onChanged=${() => {}}/>`}
     <div className="card pad" style=${{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', marginBottom: 14 }}>
       <input className="input" placeholder="Search name, phone, ID, school…" value=${q} onInput=${e => setQ(e.target.value)} aria-label="Search" style=${{ gridColumn: 'span 2' }}/>
       <${Select} value=${ltype} onChange=${setLtype} options=${LEAD_TYPES} blank="All lead types" aria-label="Lead type"/>
       <${Select} value=${stage} onChange=${setStage} options=${LEAD_STAGES} blank="All stages" aria-label="Stage"/>
+      <${Select} value=${temp} onChange=${setTemp} options=${TEMPS.map(t => ({ value: t, label: t + ' leads' }))} blank="Hot, warm & cold" aria-label="How likely"/>
       <${Select} value=${follow} onChange=${setFollow} options=${[{ value: 'due', label: 'Next action due' }, { value: 'today', label: 'Due today' }, { value: 'overdue', label: 'Overdue' }]} blank="Any next action" aria-label="Next action"/>
       <${Select} value=${source} onChange=${setSource} options=${LEAD_SOURCES} blank="All sources" aria-label="Source"/>
       <${Select} value=${cat} onChange=${setCat} options=${LEAD_CATS} blank="All grades" aria-label="Grade"/>
@@ -1264,7 +1358,7 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
     </div>
     ${rows === null ? html`<p className="muted">Loading…</p>` : !rows.length ? html`<div className="card pad muted">No leads match. Clear a filter, add a lead, or bulk upload.</div>` : html`
       <div className="card list hide-lg">${rows.map(l => html`<div key=${l.id} className="item click" onClick=${() => openLead(l.id, ids)}>
-        <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${l.name}</b>${badge(l.stage)}</div>
+        <div className="grow"><div className="row" style=${{ justifyContent: 'space-between' }}><b className="trunc">${l.name}</b><span className="row" style=${{ gap: 4 }}>${tempTag(l.temperature)}${badge(l.stage)}</span></div>
           <div className="small muted">${typeTag(l.lead_type)} ${[l.category, l.school_name].filter(Boolean).join(' · ')}</div>
           <div className="small">Next: ${NO_FOLLOW.includes(l.stage) || !l.next_follow_up ? '—' : html`<b>${l.next_action || 'Follow-up'}</b> · <b className=${followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : ''}>${whenText(l.next_follow_up, l.next_action_time)}</b>`}${isMgr ? html`<span className="muted"> · ${nameOf(l.telecaller_id)}</span>` : ''}</div></div></div>`)}</div>
       <div className="card scroll hide-sm"><table><thead><tr>${isMgr && !RO && html`<th style=${{ width: 30 }}><input type="checkbox" aria-label="Select all" checked=${sel.length === rows.length} onChange=${e => setSel(e.target.checked ? ids : [])}/></th>`}<th>Lead</th><th>Grade / school</th><th>Source</th><th>Stage</th>${isMgr && html`<th>Telecaller</th>`}<th>Last contact</th><th>Next action</th></tr></thead>
@@ -1272,7 +1366,7 @@ function Leads({ me, team, params, openLead, editLead, refreshKey, bump, toast }
           ${isMgr && !RO && html`<td onClick=${e => e.stopPropagation()}><input type="checkbox" aria-label=${'Select ' + l.name} checked=${sel.includes(l.id)} onChange=${e => setSel(e.target.checked ? [...sel, l.id] : sel.filter(x => x !== l.id))}/></td>`}
           <td><b>${l.name}</b> ${l.lead_type === 'Preliminary Programme' ? typeTag(l.lead_type) : ''}<div className="small muted">${l.code} · ${l.phone}</div></td>
           <td>${l.category || '—'}<div className="small muted">${l.school_name || ''}</div></td>
-          <td className="small">${l.source}</td><td>${badge(l.stage)}</td>${isMgr && html`<td className="small">${nameOf(l.telecaller_id)}</td>`}
+          <td className="small">${l.source}</td><td>${badge(l.stage)} ${tempTag(l.temperature)}${l.last_outcome ? html`<div className="small muted" style=${{ marginTop: 3 }}>${l.last_outcome}</div>` : ''}</td>${isMgr && html`<td className="small">${nameOf(l.telecaller_id)}</td>`}
           <td className="small">${fDate(l.last_contact)}</td>
           <td>${NO_FOLLOW.includes(l.stage) || !l.next_follow_up ? html`<span className="muted">—</span>` : html`<div className="small">${l.next_action || 'Follow-up'}</div><b className=${'small ' + (followState(l.next_follow_up) === 'overdue' ? 'bad' : followState(l.next_follow_up) === 'today' ? 'warn' : '')}>${whenText(l.next_follow_up, l.next_action_time)}</b>`}</td></tr>`)}</tbody></table></div>
       ${isMgr && sel.length > 0 && html`<div className="row hide-sm" style=${{ marginTop: 10 }}><span className="small"><b>${sel.length} selected</b> — assign to</span>
@@ -1329,6 +1423,7 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
   const isMgr = me.role !== 'telecaller';
   const [l, setL] = useState(null); const [hist, setHist] = useState([]); const [panel, setPanel] = useState('call');
   const [out, setOut] = useState(''); const [remarks, setRemarks] = useState(''); const [nx, setNx] = useState({ action: '', date: addDays(todayStr(), 1), time: '' });
+  const [spoke, setSpoke] = useState(''); const [temp, setTemp] = useState(''); const [reason, setReason] = useState(''); const [stageTo, setStageTo] = useState(''); const [act, setAct] = useState('');
   const [pay, setPay] = useState({ amount: fee(), ref: '', date: todayStr(), mode: 'UPI' });
   const [idea, setIdea] = useState({ title: '', link: '', date: todayStr() });
   const [busy, setBusy] = useState(false);
@@ -1338,24 +1433,47 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
     if (a.error) { toast('This lead isn’t available to you.'); return onClose(); }
     setL(a.data); setHist(b.data || []);
   };
-  useEffect(() => { setL(null); setOut(''); setRemarks(''); setNx({ action: '', date: addDays(todayStr(), 1), time: '' }); setPanel('call'); load(); }, [id]);
-  const pickOutcome = o => { setOut(o); const [a, d, t] = suggestLead(o, l); setNx({ action: a || '', date: d || '', time: t || '' }); };
+  const reset = () => { setOut(''); setRemarks(''); setNx({ action: '', date: addDays(todayStr(), 1), time: '' }); setSpoke(''); setTemp(''); setReason(''); setStageTo(''); setAct(''); };
+  useEffect(() => { setL(null); reset(); setPanel('call'); load(); }, [id]);
+  const pickOutcome = o => { setOut(o); const [a, d, t] = suggestLead(o, l); setNx({ action: a || '', date: d || '', time: t || '' });
+    setStageTo(suggestLeadStage(o, l)); setTemp(suggestTemp(o, l)); setReason('');
+    if (CALL_REACHED.includes(o)) setSpoke(sp => sp || 'Student'); else setSpoke(''); };
+  const pickPanel = k => { reset(); setPanel(k); if (k === 'act' && l) { setStageTo(l.stage); setTemp(l.temperature || ''); setAct(LEAD_ACT_TYPES[0] || ''); setNx({ action: 'Follow-up call', date: addDays(todayStr(), 1), time: '' }); } };
   if (!l) return html`<${Modal} title="Loading…" onClose=${onClose}><p className="muted">Loading…</p><//>`;
   const nameOf = x => team.find(t => t.id === x)?.name || (x ? 'Team member' : 'System');
   const pos = queue ? queue.indexOf(id) : -1, nextId = pos >= 0 ? queue[pos + 1] : null;
-  const closing = ['Not interested', 'Wrong number'].includes(out);
+  const late = PAID_STAGES.includes(l.stage);
+  const closing = !late && ['Not interested', 'Wrong number'].includes(stageTo);
+  const reached = CALL_REACHED.includes(out);
+  const needReason = !late && (out === 'Not interested' || stageTo === 'Not interested');
+  const offerReason = needReason || ['Interested', 'Parent to decide', 'Needs details', 'Call back later'].includes(out);
   const done = msg => { toast(msg); load(); bump(); };
 
   const logCall = async () => {
     if (!out) return toast('Pick what happened on the call');
+    if (needReason && !reason) return toast('Pick the reason they are not registering');
     if (!closing && (!nx.action || !nx.date)) return toast('Choose the next action and its date');
     setBusy(true);
     const { error } = await db.from('lead_activities').insert({ lead_id: l.id, type: 'Call', outcome: out, remarks: remarks.trim() || null,
+      spoke_to: reached ? spoke || null : null, temperature: temp || null, reason: offerReason ? reason || null : null, stage_to: late ? null : stageTo || null,
       next_follow_up: closing ? null : nx.date, next_action: closing ? null : nx.action, next_action_time: closing || !nx.time ? null : nx.time, by_user: me.id });
     setBusy(false);
-    if (error) return toast(nice(error));
-    setOut(''); setRemarks(''); setNx({ action: '', date: addDays(todayStr(), 1), time: '' });
+    if (error) return toast(/stage_to|spoke_to|temperature|lead_activities_outcome/.test(error.message) ? 'Ask the admin to run update-telecaller-tools.sql in Supabase.' : nice(error));
+    reset();
     if (nextId) { toast('Saved — next lead'); bump(); openLead(nextId, queue); } else done('Call saved');
+  };
+  const logAct = async () => {
+    if (!act) return toast('Pick the activity');
+    if (!remarks.trim()) return toast('Add a short remark');
+    if (stageTo === 'Not interested' && !reason) return toast('Pick the reason they are not registering');
+    if (!closing && (!nx.action || !nx.date)) return toast('Choose the next action and its date');
+    setBusy(true);
+    const { error } = await db.from('lead_activities').insert({ lead_id: l.id, type: act, remarks: remarks.trim(), temperature: temp || null,
+      reason: stageTo === 'Not interested' ? reason : null, stage_to: late || stageTo === l.stage ? null : stageTo || null,
+      next_follow_up: closing ? null : nx.date, next_action: closing ? null : nx.action, next_action_time: closing || !nx.time ? null : nx.time, by_user: me.id });
+    setBusy(false);
+    if (error) return toast(/Unknown activity|stage_to|temperature/.test(error.message) ? 'Ask the admin to run update-telecaller-tools.sql in Supabase.' : nice(error));
+    reset(); setPanel('call'); done('Activity saved');
   };
   const sendPayLink = async () => {
     window.open(waText(l.whatsapp || l.phone, payMsg(l, me)), '_blank');
@@ -1382,14 +1500,15 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
   const reassign = async t => { const { error } = await db.from('leads').update({ telecaller_id: t || null }).eq('id', l.id); if (error) toast(nice(error)); else done('Reassigned'); };
   const del = async () => { if (!confirm(`Delete ${l.name}? This cannot be undone.`)) return; const { error } = await db.from('leads').delete().eq('id', l.id); if (error) toast(nice(error)); else { toast('Lead deleted'); bump(); onClose(); } };
   const stepIdx = PIPELINE.indexOf(l.stage);
-  const tabs = [['call', 'Log call'], ...(!PAID_STAGES.includes(l.stage) ? [['pay', 'Payment']] : []), ...(PAID_STAGES.includes(l.stage) && !['Idea submitted','Shortlisted'].includes(l.stage) ? [['idea', 'Idea']] : [])];
+  const tabs = [['call', 'Log call'], ['act', 'Other activity'], ...(!PAID_STAGES.includes(l.stage) ? [['pay', 'Payment']] : []), ...(PAID_STAGES.includes(l.stage) && !['Idea submitted','Shortlisted'].includes(l.stage) ? [['idea', 'Idea']] : [])];
   const info = [['Lead ID', l.code], ['Lead type', l.lead_type], ['Phone', l.phone], ['WhatsApp', l.whatsapp], ['Email', l.email], ['Grade', l.category], ['School', l.school_name],
     ['Place', [l.city, l.district].filter(Boolean).join(', ')], ['Parent', l.parent_name], ['Source', [l.source, l.campaign].filter(Boolean).join(' · ')],
-    ['Telecaller', nameOf(l.telecaller_id)], ['Added', fDate(istDate(l.created_at))], ['Remarks', l.remarks]];
+    ['Telecaller', nameOf(l.telecaller_id)], ['Added', fDate(istDate(l.created_at))], ['Remarks', l.remarks],
+    ['How likely', l.temperature], ['Last call', l.last_outcome ? `${l.last_outcome}${l.last_called_at ? ' · ' + fDateTime(l.last_called_at) : ''}` : null], ['Why not registering', l.lost_reason]].filter(([k, v]) => v || !['How likely', 'Last call', 'Why not registering'].includes(k));
   if (l.paid_at) info.push(['Payment', `${inr(l.amount)} · ${l.payment_mode || ''} · Ref ${l.payment_ref || '—'} · ${fDate(l.paid_at)}`]);
   if (l.idea_at) info.push(['Idea', [l.idea_title, l.idea_link].filter(Boolean).join(' · ') || 'Submitted ' + fDate(l.idea_at)]);
 
-  return html`<${Modal} title=${l.name} sub=${html`${badge(l.stage)} ${typeTag(l.lead_type)} <span style=${{ marginLeft: 4 }}>${[l.category, l.school_name].filter(Boolean).join(' · ') || l.code}</span>${queue && pos >= 0 ? html`<span className="muted"> · ${pos + 1} of ${queue.length}</span>` : ''}`} onClose=${onClose}>
+  return html`<${Modal} title=${l.name} sub=${html`${badge(l.stage)} ${tempTag(l.temperature)} ${typeTag(l.lead_type)} <span style=${{ marginLeft: 4 }}>${[l.category, l.school_name].filter(Boolean).join(' · ') || l.code}</span>${queue && pos >= 0 ? html`<span className="muted"> · ${pos + 1} of ${queue.length}</span>` : ''}`} onClose=${onClose}>
     <div className="row" style=${{ marginBottom: 12 }}>
       <a className="btn primary" href=${tel(l.phone)}>${I.phone} Call ${l.phone}</a>
       <a className="btn" href=${wa(l.whatsapp || l.phone)} target="_blank">${I.wa} WhatsApp</a>
@@ -1405,16 +1524,39 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
       ${stepIdx < 0 && badge(l.stage)}
     </div>
 
-    ${!RO && html`<div className="seg" style=${{ marginBottom: 12 }}>${tabs.map(([k, t]) => html`<button key=${k} className=${panel === k ? 'on' : ''} onClick=${() => setPanel(k)}>${t}</button>`)}</div>`}
+    ${!RO && html`<div className="seg" style=${{ marginBottom: 12 }}>${tabs.map(([k, t]) => html`<button key=${k} className=${panel === k ? 'on' : ''} onClick=${() => pickPanel(k)}>${t}</button>`)}</div>`}
     ${!RO && panel === 'call' && html`<div className="card pad" style=${{ marginBottom: 16 }}>
-      <div className="chips" role="radiogroup" aria-label="Call outcome">${CALL_OUTCOMES.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${out === o} className=${'chip' + (out === o ? ' on' : '')} onClick=${() => pickOutcome(o)}>${o}</button>`)}</div>
-      <div className="form two" style=${{ marginTop: 12 }}>
-        <${Field} label="Remarks" full><textarea className="input" rows="2" value=${remarks} onInput=${e => setRemarks(e.target.value)} placeholder="What did they say?"/><//>
-      </div>
-      ${out && !closing && html`<div style=${{ marginTop: 12 }}><p className="small" style=${{ margin: '0 0 8px' }}><b>Suggested next step</b> — change it if you agreed something else.</p><${NextAction} actions=${LEAD_ACTIONS} value=${nx} onChange=${setNx} required/></div>`}
-      ${closing && html`<p className="small muted" style=${{ marginTop: 10 }}>No next action — this lead will be closed as ${out}.</p>`}
-      <button className="btn primary" style=${{ marginTop: 12 }} disabled=${busy} onClick=${logCall}>${busy ? 'Saving…' : nextId ? 'Save & next lead' : 'Save call'}</button>
-      ${l.no_answer_count > 0 && !PAID_STAGES.includes(l.stage) && html`<span className="small muted" style=${{ marginLeft: 10 }}>${l.no_answer_count} unanswered in a row${l.no_answer_count >= 2 ? ' — one more moves it to Not reachable' : ''}</span>`}
+      <p className="lbl">Reached</p>
+      <div className="chips" role="radiogroup" aria-label="Call result — reached">${CALL_REACHED.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${out === o} className=${'chip' + (out === o ? ' on' : '')} onClick=${() => pickOutcome(o)}>${o}</button>`)}</div>
+      <p className="lbl" style=${{ marginTop: 12 }}>Not reached</p>
+      <div className="chips" role="radiogroup" aria-label="Call result — not reached">${CALL_MISSED.map(o => html`<button type="button" key=${o} role="radio" aria-checked=${out === o} className=${'chip' + (out === o ? ' on' : '')} onClick=${() => pickOutcome(o)}>${o}</button>`)}</div>
+      ${out && html`<div style=${{ display: 'grid', gap: 14, marginTop: 16 }}>
+        ${reached && html`<div><p className="lbl">Spoke to</p><${Pills} options=${SPOKE_TO} value=${spoke} onChange=${setSpoke} label="Spoke to"/></div>`}
+        ${out !== 'Wrong number' && html`<div><p className="lbl">How likely to register?</p><${Pills} options=${TEMPS} value=${temp} onChange=${setTemp} label="Hot, warm or cold"/></div>`}
+        ${offerReason && html`<div><p className="lbl">${needReason ? 'Why not registering? *' : 'Concern raised (optional)'}</p>
+          <div className="pills">${LEAD_REASONS.map(o => html`<button type="button" key=${o} className=${'pill' + (reason === o ? ' on' : '')} onClick=${() => setReason(reason === o ? '' : o)}>${o}</button>`)}
+            <${AddItem} kind="lead_reason" toast=${toast} label="+ Other reason" onAdded=${v => setReason(v)}/></div></div>`}
+        ${!late ? html`<div style=${{ maxWidth: 320 }}><p className="lbl">Stage after this call</p><${Select} value=${stageTo} onChange=${setStageTo} options=${SETTABLE_STAGES.includes(l.stage) ? SETTABLE_STAGES : [l.stage, ...SETTABLE_STAGES]} aria-label="Stage after this call"/>
+            ${stageTo !== l.stage && html`<p className="small soft" style=${{ margin: '4px 0 0' }}>${l.stage} → <b>${stageTo}</b></p>`}</div>`
+          : html`<p className="small soft" style=${{ margin: 0 }}>Registered — the stage moves with the idea submission.</p>`}
+        <div><p className="lbl">Remarks</p><textarea className="input" rows="2" value=${remarks} onInput=${e => setRemarks(e.target.value)} placeholder="What did they say?" aria-label="Remarks"/>
+          <div className="pills" style=${{ marginTop: 6 }}>${(reached ? QUICK.reached : QUICK.missed).map(q => html`<button type="button" key=${q} className="pill" onClick=${() => setRemarks(r => appendRemark(r, q))}>+ ${q}</button>`)}</div></div>
+        ${!closing ? html`<div><p className="small" style=${{ margin: '0 0 8px' }}><b>Next step</b> — suggested, change it if you agreed something else.</p><${NextAction} actions=${LEAD_ACTIONS} value=${nx} onChange=${setNx} required/></div>`
+          : html`<p className="small muted" style=${{ margin: 0 }}>No next action — this lead will be closed as ${stageTo}.</p>`}
+      </div>`}
+      <button className="btn primary" style=${{ marginTop: 14 }} disabled=${busy} onClick=${logCall}>${busy ? 'Saving…' : nextId ? 'Save & next lead' : 'Save call'}</button>
+      ${l.no_answer_count > 0 && !late && html`<span className="small muted" style=${{ marginLeft: 10 }}>${l.no_answer_count} unanswered in a row${l.no_answer_count >= 2 ? ' — one more suggests Not reachable' : ''}</span>`}
+    </div>`}
+    ${!RO && panel === 'act' && html`<div className="card pad" style=${{ marginBottom: 16, display: 'grid', gap: 14 }}>
+      <div><p className="lbl">Activity</p><div className="pills">${LEAD_ACT_TYPES.map(o => html`<button type="button" key=${o} className=${'pill' + (act === o ? ' on' : '')} onClick=${() => setAct(o)}>${o}</button>`)}
+        <${AddItem} kind="lead_activity" toast=${toast} label="+ Add activity" onAdded=${v => setAct(v)}/></div></div>
+      <div><p className="lbl">Remarks *</p><textarea className="input" rows="2" value=${remarks} onInput=${e => setRemarks(e.target.value)} placeholder="What did you send or discuss?" aria-label="Remarks"/>
+        <div className="pills" style=${{ marginTop: 6 }}>${QUICK.activity.map(q => html`<button type="button" key=${q} className="pill" onClick=${() => setRemarks(r => appendRemark(r, q))}>+ ${q}</button>`)}</div></div>
+      <div><p className="lbl">How likely to register?</p><${Pills} options=${TEMPS} value=${temp} onChange=${setTemp} label="Hot, warm or cold"/></div>
+      ${!late && html`<div style=${{ maxWidth: 320 }}><p className="lbl">Stage</p><${Select} value=${stageTo} onChange=${setStageTo} options=${SETTABLE_STAGES.includes(l.stage) ? SETTABLE_STAGES : [l.stage, ...SETTABLE_STAGES]} aria-label="Stage"/></div>`}
+      ${stageTo === 'Not interested' && html`<div><p className="lbl">Why not registering? *</p><div className="pills">${LEAD_REASONS.map(o => html`<button type="button" key=${o} className=${'pill' + (reason === o ? ' on' : '')} onClick=${() => setReason(o)}>${o}</button>`)}</div></div>`}
+      ${!closing && html`<${NextAction} actions=${LEAD_ACTIONS} value=${nx} onChange=${setNx} required/>`}
+      <div><button className="btn primary" disabled=${busy} onClick=${logAct}>${busy ? 'Saving…' : 'Save activity'}</button></div>
     </div>`}
     ${!RO && panel === 'pay' && html`<div className="card pad" style=${{ marginBottom: 16 }}><div className="form two">
       <${Field} label="Amount (₹)"><input className="input" type="number" min="1" value=${pay.amount} onInput=${e => setPay({ ...pay, amount: e.target.value })}/><//>
@@ -1433,7 +1575,7 @@ function LeadDetail({ me, team, id, queue, onClose, openLead, editLead, openScho
       <${Field} label="Change stage (corrections)"><${Select} value=${l.stage} onChange=${setStage} options=${LEAD_STAGES}/><//></div>`}
 
     <h3 style=${{ marginBottom: 10 }}>History</h3>
-    ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type}${h.outcome ? ' · ' + h.outcome : ''}</b>
+    ${hist.length ? html`<div className="timeline">${hist.map(h => html`<div key=${h.id}><b className="small">${h.type}${h.outcome ? ' · ' + h.outcome : ''}</b>${h.temperature ? html` ${tempTag(h.temperature)}` : ''}${h.spoke_to ? html` <span className="small muted">· spoke to ${h.spoke_to.toLowerCase()}</span>` : ''}${h.reason ? html` <span className="small">· <b>${h.reason}</b></span>` : ''}
       <div className="small muted">${fDateTime(h.created_at)} · ${nameOf(h.by_user)}${h.next_follow_up ? ' · next: ' + (h.next_action || 'follow-up') + ', ' + whenText(h.next_follow_up, h.next_action_time) : ''}</div>${h.remarks && html`<div className="small">${h.remarks}</div>`}</div>`)}</div>` : html`<p className="muted small">No activity yet. Make the first call.</p>`}
     <h3 style=${{ margin: '20px 0 10px' }}>Details</h3>
     <div className="card list">${info.map(([k, v]) => html`<div key=${k} className="item small"><span className="muted" style=${{ width: 110, flex: 'none' }}>${k}</span><span style=${{ wordBreak: 'break-word' }}>${v || '—'}</span></div>`)}</div>
@@ -1773,7 +1915,7 @@ const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) =
 const dayDiff = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 const SCHOOL_RANK = { 'New': 0, 'Contacted': 1, 'Not interested': 1, 'Interested': 2, 'Confirmed': 3, 'Programme scheduled': 3, 'Programme completed': 4 };
 const rankOf = st => SCHOOL_RANK[st] ?? 2;          // custom stages sit between Interested and Confirmed
-const CONNECTED = ['Connected', 'Interested', 'Call back later', 'Not interested'];
+const CONNECTED = ['Connected', ...CALL_REACHED];
 
 function periodRange(p, from, to) {
   const t = todayStr();
@@ -1843,7 +1985,7 @@ function Insights({ me, team, toast }) {
     setRaw(null); setErr(null);
     const since = pStart + 'T00:00:00+05:30';
     Promise.all([
-      fetchAll(() => db.from('leads').select('id,created_at,stage,paid_at,amount,source,lead_type,telecaller_id,district,school_name,next_follow_up,idea_at')),
+      fetchAll(() => db.from('leads').select('id,created_at,stage,paid_at,amount,source,lead_type,telecaller_id,district,school_name,next_follow_up,idea_at,temperature,lost_reason')),
       fetchAll(() => db.from('lead_activities').select('lead_id,type,outcome,by_user,created_at').gte('created_at', since)),
       fetchAll(() => db.from('schools').select('id,status,district,officer_id,next_follow_up,created_at')),
       fetchAll(() => db.from('outreach').select('school_id,type,outcome,officer_id,done_on').gte('done_on', pStart)),
@@ -1937,6 +2079,11 @@ function Insights({ me, team, toast }) {
     return { district: d, schools: ss.length, contacted: ss.filter(s => s.status !== 'New').length, confirmed: ss.filter(s => rankOf(s.status) >= 3).length,
       leads: ll.length, paid: ll.filter(l => PAID_STAGES.includes(l.stage)).length };
   }).sort((a, b) => b.schools + b.leads - a.schools - a.leads);
+  const lostL = newL.filter(l => l.stage === 'Not interested');
+  const reasons = group(lostL, 'lost_reason').map(([k, v]) => ({ label: k === '(none)' ? 'No reason recorded' : k, value: v.length, color: k === '(none)' ? 'var(--line)' : undefined })).sort((a, b) => b.value - a.value);
+  const openL = L0.filter(l => !NO_FOLLOW.includes(l.stage) && !PAID_STAGES.includes(l.stage) && l.stage !== 'Not reachable');
+  const temps = [['Hot', 'var(--s2)'], ['Warm', 'var(--s1)'], ['Cold', 'var(--s3)']].map(([t, c]) => ({ label: t, value: openL.filter(l => l.temperature === t).length, color: c }))
+    .concat([{ label: 'Not marked yet', value: openL.filter(l => !l.temperature).length, color: 'var(--line)' }]);
   const overdueSchools = S.filter(s => !CLOSED.includes(s.status) && s.next_follow_up && s.next_follow_up < today).length;
   const overdueLeads = L0.filter(l => !NO_FOLLOW.includes(l.stage) && l.next_follow_up && l.next_follow_up < today).length;
   const unassignedLeads = L0.filter(l => !l.telecaller_id && !['Not interested', 'Wrong number'].includes(l.stage)).length;
@@ -1969,6 +2116,7 @@ function Insights({ me, team, toast }) {
     Officers: officers.map(o => ({ Officer: o.name, Activities: o.activities, Visits: o.visits, Meetings: o.meetings, 'Schools confirmed': o.confirmed, Programmes: o.programmes, Students: o.students, 'Schools owned': o.schools, Overdue: o.overdue })),
     Sources: sources.map(s => ({ Source: s.label, Leads: s.value, Paid: s.paid, 'Conversion %': pct(s.paid, s.value) })),
     'Lead types': types.map(t => ({ Type: t.label, Leads: t.value, Paid: t.paid, 'Conversion %': t.conv, 'Revenue (₹)': t.revenue })),
+    'Not registering — reasons': reasons.map(r => ({ Reason: r.label, Leads: r.value })),
     Districts: districts.map(d => ({ District: d.district, Schools: d.schools, Contacted: d.contacted, Confirmed: d.confirmed, 'New leads': d.leads, Paid: d.paid })),
   };
 
@@ -2010,6 +2158,10 @@ function Insights({ me, team, toast }) {
       <div className="grid g2 g2e" style=${{ marginTop: 16 }}>
         ${card('Where leads come from', html`<${HBars} rows=${sources.map(s => ({ ...s, note: `${s.paid} paid · ${pct(s.paid, s.value)}%` }))}/>`, 'New leads by source, with paid and conversion.')}
         ${card('Outreach activity by type', actTypes.length ? html`<${HBars} rows=${actTypes}/>` : html`<p className="muted small">No outreach logged in this period.</p>`, 'Calls, visits and meetings logged in this period.')}
+      </div>
+      <div className="grid g2 g2e" style=${{ marginTop: 16 }}>
+        ${card('Why leads didn’t register', reasons.length ? html`<${HBars} rows=${reasons} color="var(--s2)"/>` : html`<p className="muted small">No reasons recorded yet. Telecallers pick one when a call ends as Not interested.</p>`, 'Leads added in this period that are now Not interested.')}
+        ${card('Open leads: how likely to register', html`<${HBars} rows=${temps}/>`, 'Right now — leads not yet registered or closed, as marked by telecallers.')}
       </div>
       <div style=${{ marginTop: 16 }}>${card('Districts', table([['District', d => html`<b>${d.district}</b>`], ['Schools', d => d.schools, 1], ['Contacted', d => d.contacted, 1], ['Confirmed', d => d.confirmed, 1, () => 'ok'], ['New leads', d => d.leads, 1], ['Paid', d => d.paid, 1, () => 'ok']], districts, 'No data yet.'), 'Schools: all in the CRM. Leads: added in this period.')}</div>
       <div className="grid g2 g2e" style=${{ marginTop: 16 }}>
@@ -2085,7 +2237,7 @@ function App() {
       ${cur === 'schools' && html`<${Schools} ...${P} params=${params}/>`}
       ${cur === 'programmes' && html`<${Programmes} ...${P} params=${params}/>`}
       ${cur === 'reports' && html`<${Reports} ...${P}/>`}
-      ${cur === 'ldash' && html`<${LeadDashboard} ...${P} go=${go}/>`}
+      ${cur === 'ldash' && html`<${LeadDashboard} ...${P} go=${go} reloadTeam=${reloadTeam}/>`}
       ${cur === 'leads' && html`<${Leads} ...${P} params=${params}/>`}
       ${cur === 'lreports' && html`<${LeadReports} ...${P}/>`}
       ${cur === 'insights' && html`<${Insights} me=${me} team=${team} toast=${toast}/>`}
